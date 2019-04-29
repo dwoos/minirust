@@ -25,16 +25,18 @@ fn compile_expr(cgc: &mut CodeGenContext, module: &mut llvm::Module, bb: LLVMBas
     }
 }
 
-fn compile_statement(cgc: &mut CodeGenContext, module: &mut llvm::Module, f: LLVMValueRef,
-                     stmt: &Stmt) -> LLVMBasicBlockRef {
+fn compile_statement(cgc: &mut CodeGenContext,
+                     module: &mut llvm::Module,
+                     bb: LLVMBasicBlockRef,
+                     next_bb: LLVMBasicBlockRef,
+                     stmt: &Stmt) {
     match stmt {
         Stmt::Print(e) => {
-            let bb = llvm::add_basic_block(module, f, "");
             let arg1 = llvm::add_pointer_cast(module, bb, cgc.int_format_string,
                                           llvm::int8_ptr_type(), "");
             let arg2 = compile_expr(cgc, module, bb, e);
             llvm::add_function_call(module, bb, "printf", &mut [arg1, arg2], "");
-            bb
+            llvm::add_br(module, bb, next_bb);
         }
     }
 }
@@ -50,9 +52,9 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let mut cgc = CodeGenContext {int_format_string};
     let mut last_block = entry_block;
     for stmt in prog.stmts.iter() {
-        let bb = compile_statement(&mut cgc, &mut module, main, stmt);
-        llvm::add_br(&mut module, last_block, bb);
-        last_block = bb;
+        let mut next_block = llvm::add_basic_block(&mut module, main, "");
+        compile_statement(&mut cgc, &mut module, last_block, next_block, stmt);
+        last_block = next_block;
     }
     llvm::add_br(&mut module, last_block, exit_block);
     llvm::write_module(&mut module, output_file);

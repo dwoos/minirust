@@ -1,0 +1,41 @@
+use std::str::FromStr;
+use crate::ast::{Program, Stmt, Expr, RcExpr, Bop};
+
+grammar;
+
+pub Program: Program = {
+    <stmts: (<Stmt>)*> => Program {<>}
+}
+
+pub Stmt: Stmt = {
+    "print" <Expr> ";" => Stmt::Print(<>)
+}
+
+pub Expr: RcExpr = {
+    <e1: Expr> <bop: Bop1> <e2: Factor> => Expr::Bop {<>}.into(),
+    Factor,
+};
+
+pub Factor: RcExpr = {
+    <e1: Factor> <bop: Bop2> <e2: Term> => Expr::Bop {<>}.into(),
+    Term
+}
+
+pub Term: RcExpr = {
+    Num => Expr::Num(<>).into(),
+    "(" <Expr> ")"
+}
+
+Bop1: Bop = { 
+    "+" => Bop::Add,
+    "-" => Bop::Sub,
+};
+
+Bop2: Bop = { 
+    "*" => Bop::Mul,
+    "/" => Bop::Div,
+};
+
+Num: i32 = {
+    r"[0-9]+" => i32::from_str(<>).unwrap(),
+};

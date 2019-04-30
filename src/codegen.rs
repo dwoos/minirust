@@ -1,4 +1,4 @@
-use crate::ast::{Program,Stmt,RcExpr,Expr, Bop};
+use crate::ast::*;
 use crate::llvm;
 use failure::Error;
 
@@ -8,35 +8,68 @@ struct CodeGenContext {
     int_format_string: LLVMValueRef
 }
 
-fn compile_expr(cgc: &mut CodeGenContext, module: &mut llvm::Module, bb: LLVMBasicBlockRef,
-                expr: &RcExpr) -> LLVMValueRef {
-    match **expr {
-        Expr::Num(x) => llvm::int32(x),
+fn size(cgc: &mut CodeGenContext, ty: RcType) -> LLVMTypeRef {
+    match *ty {
+        Type::Int32 => llvm::int32_type(),
+        Type::Bool => llvm::int1_type()
+    }
+}
+
+// Returns a value and an unterminated basic block
+fn compile_expr(cgc: &mut CodeGenContext,
+                module: &mut llvm::Module,
+                f: LLVMValueRef,
+                bb: LLVMBasicBlockRef,
+                expr: &TypedExpr) -> (LLVMValueRef, LLVMBasicBlockRef) {
+    match *expr.expr {
+        Expr::Literal(ref l) => {
+            (match l {
+                Literal::Num(x) => llvm::int32(*x),
+                Literal::Bool(b) => llvm::int1(*b)
+            }, bb)
+        }
         Expr::Bop {ref bop, ref e1, ref e2} => {
-            let arg1 = compile_expr(cgc, module, bb, e1);
-            let arg2 = compile_expr(cgc, module, bb, e2);
-            match bop {
+            let (arg1, bb) = compile_expr(cgc, module, f, bb, e1);
+            let (arg2, bb) = compile_expr(cgc, module, f, bb, e2);
+            (match bop {
                 Bop::Add => llvm::add_add(module, bb, arg1, arg2),
                 Bop::Sub => llvm::add_sub(module, bb, arg1, arg2),
                 Bop::Mul => llvm::add_mul(module, bb, arg1, arg2),
                 Bop::Div => llvm::add_sdiv(module, bb, arg1, arg2),
-            }
+            }, bb)
+        }
+        Expr::If {ref condition, ref then, ref otherwise} => {
+            let llvm_type = size(cgc, expr.ty.clone().unwrap());
+            let result = llvm::add_alloca(module, bb, llvm_type);
+            let (condition_val, bb) = compile_expr(cgc, module, f, bb, condition);
+            let then_bb = llvm::add_basic_block(module, f, "");
+            let otherwise_bb = llvm::add_basic_block(module, f, "");
+            let exit_bb = llvm::add_basic_block(module, f, "");
+            llvm::add_conditional_br(module, bb, condition_val, then_bb, otherwise_bb);
+            let (then_value, then_bb) = compile_expr(cgc, module, f, then_bb, then);
+            llvm::add_store(module, then_bb, then_value, result);
+            llvm::add_br(module, then_bb, exit_bb);
+            let (otherwise_value, otherwise_bb) = compile_expr(cgc, module, f, otherwise_bb, otherwise);
+            llvm::add_store(module, otherwise_bb, otherwise_value, result);
+            llvm::add_br(module, otherwise_bb, exit_bb);
+            (llvm::add_load(module, exit_bb, result), exit_bb)
         }
     }
 }
 
+// Returns an unterminated basic block
 fn compile_statement(cgc: &mut CodeGenContext,
                      module: &mut llvm::Module,
+                     f: LLVMValueRef,
                      bb: LLVMBasicBlockRef,
-                     next_bb: LLVMBasicBlockRef,
-                     stmt: &Stmt) {
+                     stmt: &Stmt) -> LLVMBasicBlockRef {
     match stmt {
         Stmt::Print(e) => {
             let arg1 = llvm::add_pointer_cast(module, bb, cgc.int_format_string,
-                                          llvm::int8_ptr_type(), "");
-            let arg2 = compile_expr(cgc, module, bb, e);
+                                              llvm::int8_ptr_type(), "");
+            let (arg2, bb) = compile_expr(cgc, module, f, bb, e);
             llvm::add_function_call(module, bb, "printf", &mut [arg1, arg2], "");
-            llvm::add_br(module, bb, next_bb);
+            bb
         }
     }
 }
@@ -52,9 +85,7 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let mut cgc = CodeGenContext {int_format_string};
     let mut last_block = entry_block;
     for stmt in prog.stmts.iter() {
-        let mut next_block = llvm::add_basic_block(&mut module, main, "");
-        compile_statement(&mut cgc, &mut module, last_block, next_block, stmt);
-        last_block = next_block;
+        last_block = compile_statement(&mut cgc, &mut module, main, last_block, stmt);
     }
     llvm::add_br(&mut module, last_block, exit_block);
     llvm::write_module(&mut module, output_file);

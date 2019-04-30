@@ -1,7 +1,14 @@
 use std::rc::Rc;
 
-pub type RcExpr = Rc<Expr>;
+#[derive(PartialEq, Debug, Clone)]
+pub enum Type {
+    Int32,
+    Bool
+}
 
+pub type RcType = Rc<Type>;
+
+#[derive(Debug)]
 pub enum Bop {
     Add,
     Sub,
@@ -9,19 +16,45 @@ pub enum Bop {
     Div,
 }
 
+#[derive(Debug)]
+pub enum Literal {
+    Num(i32),
+    Bool(bool)
+}
+
+#[derive(Debug)]
 pub enum Expr {
     Bop {
         bop: Bop,
-        e1: RcExpr,
-        e2: RcExpr
+        e1: TypedExpr,
+        e2: TypedExpr
     },
-    Num(i32)
+    Literal(Literal),
+    If {
+        condition: TypedExpr,
+        then: TypedExpr,
+        otherwise: TypedExpr
+    }
 }
 
+#[derive(Debug)]
+pub struct TypedExpr {
+    pub ty: Option<RcType>,
+    pub expr: Rc<Expr>
+}
+
+impl From<Expr> for TypedExpr {
+    fn from(expr: Expr) -> TypedExpr {
+        TypedExpr { ty:None, expr: expr.into() }
+    }
+}
+
+#[derive(Debug)]
 pub enum Stmt {
-    Print(RcExpr)
+    Print(TypedExpr)
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub stmts: Vec<Stmt>
 }

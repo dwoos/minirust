@@ -2,6 +2,9 @@
 Much of the below was copied from https://github.com/Wilfred/bfc/blob/master/src/llvm.rs
 */
 
+#![allow(dead_code)]
+
+
 use llvm_sys::core::*;
 use llvm_sys::prelude::*;
 use llvm_sys::{LLVMBuilder, LLVMModule};
@@ -10,6 +13,7 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_uint, c_ulonglong};
 use std::ptr::null_mut;
 use std::str;
+
 
 /// A struct that keeps ownership of all the strings we've passed to
 /// the LLVM API until we destroy the `LLVMModule`.
@@ -99,7 +103,7 @@ impl Drop for Builder {
 
 /// Convert this integer to LLVM's representation of a constant
 /// integer.
-unsafe fn int8(val: i8) -> LLVMValueRef {
+fn int8(val: i8) -> LLVMValueRef {
     unsafe {LLVMConstInt(LLVMInt8Type(), val as c_ulonglong, LLVM_FALSE)}
 }
 /// Convert this integer to LLVM's representation of a constant
@@ -111,6 +115,10 @@ pub fn int32(val: i32) -> LLVMValueRef {
 
 pub fn int1_type() -> LLVMTypeRef {
     unsafe { LLVMInt1Type() }
+}
+
+pub fn int1(val: bool) -> LLVMValueRef {
+    unsafe {LLVMConstInt(LLVMInt1Type(), (if val {1} else {0}) as c_ulonglong, LLVM_FALSE)}
 }
 
 pub fn int8_type() -> LLVMTypeRef {
@@ -150,7 +158,6 @@ fn add_varargs_function(
 }
 
 pub fn add_static_string(module: &mut Module, value: &str, name: &str) -> LLVMValueRef {
-    let builder = Builder::new();
     unsafe {
         let llvm_str = LLVMConstString(
             module.new_string_ptr(value),
@@ -281,6 +288,19 @@ pub fn add_br(_: &mut Module, bb: LLVMBasicBlockRef, next: LLVMBasicBlockRef) {
     }
 }
 
+pub fn add_conditional_br(_: &mut Module,
+                          bb: LLVMBasicBlockRef,
+                          condition: LLVMValueRef,
+                          then: LLVMBasicBlockRef,
+                          otherwise: LLVMBasicBlockRef) {
+    let builder = Builder::new();
+    builder.position_at_end(bb);
+    unsafe {
+        LLVMBuildCondBr(builder.builder, condition, then, otherwise);
+    }
+}
+
+
 pub fn add_pointer_cast(module: &mut Module,
                            bb: LLVMBasicBlockRef,
                            pointer: LLVMValueRef,
@@ -346,5 +366,33 @@ pub fn add_sdiv(module: &mut Module, bb: LLVMBasicBlockRef,
     builder.position_at_end(bb);
     unsafe {
         LLVMBuildSDiv(builder.builder, value1, value2, module.empty_name)
+    }
+}
+
+pub fn add_alloca(module: &mut Module, bb: LLVMBasicBlockRef,
+                  ty: LLVMTypeRef) -> LLVMValueRef {
+    let builder = Builder::new();
+    builder.position_at_end(bb);
+    unsafe {
+        LLVMBuildAlloca(builder.builder, ty, module.empty_name)
+    }
+}
+
+pub fn add_load(module: &mut Module, bb: LLVMBasicBlockRef,
+                ptr: LLVMValueRef) -> LLVMValueRef {
+    let builder = Builder::new();
+    builder.position_at_end(bb);
+    unsafe {
+        LLVMBuildLoad(builder.builder, ptr, module.empty_name)
+    }
+}
+
+pub fn add_store(_module: &mut Module, bb: LLVMBasicBlockRef,
+                 value: LLVMValueRef,
+                 ptr: LLVMValueRef) {
+    let builder = Builder::new();
+    builder.position_at_end(bb);
+    unsafe {
+        LLVMBuildStore(builder.builder, value, ptr);
     }
 }

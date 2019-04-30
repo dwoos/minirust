@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::ast::{Program, Stmt, Expr, RcExpr, Bop};
+use crate::ast::{Program, Stmt, Expr, TypedExpr, Bop, Literal};
 
 grammar;
 
@@ -11,18 +11,20 @@ pub Stmt: Stmt = {
     "print" <Expr> ";" => Stmt::Print(<>)
 }
 
-pub Expr: RcExpr = {
+pub Expr: TypedExpr = {
     <e1: Expr> <bop: Bop1> <e2: Factor> => Expr::Bop {<>}.into(),
     Factor,
 };
 
-pub Factor: RcExpr = {
+pub Factor: TypedExpr = {
     <e1: Factor> <bop: Bop2> <e2: Term> => Expr::Bop {<>}.into(),
     Term
 }
 
-pub Term: RcExpr = {
-    Num => Expr::Num(<>).into(),
+pub Term: TypedExpr = {
+    Literal => Expr::Literal(<>).into(),
+    "if" <condition: Expr> "{" <then: Expr> "}" "else" "{" <otherwise: Expr> "}" 
+         => Expr::If {<>}.into(),
     "(" <Expr> ")"
 }
 
@@ -36,6 +38,8 @@ Bop2: Bop = {
     "/" => Bop::Div,
 };
 
-Num: i32 = {
-    r"[0-9]+" => i32::from_str(<>).unwrap(),
+Literal: Literal = {
+    r"[0-9]+" => Literal::Num(i32::from_str(<>).unwrap()),
+    "true" => Literal::Bool(true),
+    "false" => Literal::Bool(false)
 };

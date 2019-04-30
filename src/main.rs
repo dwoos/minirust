@@ -1,6 +1,7 @@
 mod llvm;
 mod ast;
 mod codegen;
+mod typecheck;
 
 use clap::{App, Arg};
 use lalrpop_util::lalrpop_mod;
@@ -27,6 +28,8 @@ fn main() {
         .expect("error reading input");
 
     let output_file = matches.value_of("OUTPUT").unwrap();
-    let parsed = grammar::ProgramParser::new().parse(&input).expect("parse error");
+    let mut parsed = grammar::ProgramParser::new().parse(&input).expect("parse error");
+    typecheck::check_program(&mut parsed).expect("type error");
+    println!("{:?}", parsed);
     codegen::compile_program(parsed, output_file).expect("compile error");
 }

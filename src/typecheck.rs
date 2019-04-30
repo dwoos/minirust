@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use failure::{ResultExt, Error, bail};
+use failure::{Error, bail};
 use std::rc::Rc;
 use crate::ast::*;
 
@@ -12,7 +12,8 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
         Expr::Literal(ref l) => {
             match l {
                 Literal::Num(_) => Type::Int32.into(),
-                Literal::Bool(_) => Type::Bool.into()
+                Literal::Bool(_) => Type::Bool.into(),
+                Literal::Unit => Type::Unit.into()
             }
         }
         Expr::Bop {ref bop, ref mut e1, ref mut e2} => {
@@ -26,7 +27,20 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             let ty = then.ty.clone().unwrap();
             check_expr(context, otherwise, &ty)?;
             ty
+        },
+        Expr::Print(ref mut e) => {
+            check_expr(context, e, &Type::Int32.into())?;
+            Type::Unit.into()
         }
+        Expr::Block(ref mut stmts, ref mut e) => {
+            for stmt in stmts.iter_mut() {
+                check_stmt(context, stmt)?;
+            }
+            infer_expr(context, e)?;
+            let ty = e.ty.clone().unwrap();
+            ty
+        }
+        _ => unimplemented!()
     };
     expr.ty = Some(ty);
     Ok(())
@@ -43,8 +57,12 @@ fn check_expr(context: &mut Context, expr: &mut TypedExpr, ty: &RcType) -> Resul
 
 fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
     match stmt {
-        Stmt::Print(e) => check_expr(context, e, &Type::Int32.into())
+        Stmt::Let(None, ref mut e, false) => {
+            infer_expr(context, e)?;
+        }
+        _ => unimplemented!()
     }
+    Ok(())
 }
 
 pub fn check_program(program: &mut Program) -> Result<(), Error> {

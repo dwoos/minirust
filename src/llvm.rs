@@ -175,6 +175,20 @@ pub fn add_static_string(module: &mut Module, value: &str, name: &str) -> LLVMVa
     }
 }
 
+pub fn add_static_int1(module: &mut Module, value: bool) -> LLVMValueRef {
+    unsafe {
+        let value = int1(value);
+        let global = LLVMAddGlobal(
+            module.module,
+            int1_type(),
+            module.empty_name);
+        LLVMSetInitializer(global, value);
+        LLVMSetGlobalConstant(global, LLVM_TRUE);
+        global
+    }
+}
+
+
 fn add_stdlib_declarations(module: &mut Module) {
     let void;
     unsafe {

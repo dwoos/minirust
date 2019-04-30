@@ -3,10 +3,16 @@ use std::rc::Rc;
 #[derive(PartialEq, Debug, Clone)]
 pub enum Type {
     Int32,
-    Bool
+    Bool,
+    Unit
 }
 
 pub type RcType = Rc<Type>;
+
+#[derive(Debug)]
+pub enum Identifier {
+    Identifier(String)
+}
 
 #[derive(Debug)]
 pub enum Bop {
@@ -19,7 +25,8 @@ pub enum Bop {
 #[derive(Debug)]
 pub enum Literal {
     Num(i32),
-    Bool(bool)
+    Bool(bool),
+    Unit
 }
 
 #[derive(Debug)]
@@ -34,7 +41,9 @@ pub enum Expr {
         condition: TypedExpr,
         then: TypedExpr,
         otherwise: TypedExpr
-    }
+    },
+    Print(TypedExpr),
+    Block(Vec<Stmt>, TypedExpr)
 }
 
 #[derive(Debug)]
@@ -51,7 +60,7 @@ impl From<Expr> for TypedExpr {
 
 #[derive(Debug)]
 pub enum Stmt {
-    Print(TypedExpr)
+    Let(Option<Identifier>, TypedExpr, bool)
 }
 
 #[derive(Debug)]

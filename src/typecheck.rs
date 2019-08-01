@@ -50,7 +50,9 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             ty
         }
         Expr::Var(ref mut id) => {
-            let ty = context.lookup(id).unwrap();
+            let ty = context
+                .lookup(id)
+                .expect(&format!("Unknown identifier {:?}", id));
             ty.clone()
         }
         _ => unimplemented!(),

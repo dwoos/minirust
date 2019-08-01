@@ -1,0 +1,2 @@
+print(2);
+print (if true { 3 + 5 } else { 4 });

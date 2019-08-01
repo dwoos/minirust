@@ -1,5 +1,6 @@
 mod ast;
 mod codegen;
+mod context;
 mod typecheck;
 
 use clap::{App, Arg};

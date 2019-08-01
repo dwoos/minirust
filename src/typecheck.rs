@@ -1,48 +1,14 @@
 #![allow(dead_code)]
 
 use crate::ast::*;
+use crate::context;
 use failure::{bail, Error};
-use std::collections::HashMap;
 use std::rc::Rc;
 
-struct Context {
-    envs: Vec<HashMap<Identifier, RcType>>,
-}
-
-impl Context {
-    fn new() -> Self {
-        Self {
-            envs: vec![HashMap::new()],
-        }
-    }
-
-    fn lookup(&self, id: &Identifier) -> Option<RcType> {
-        for env in self.envs.iter().rev() {
-            if let Some(ty) = env.get(&id) {
-                return Some(ty.clone());
-            }
-        }
-        None
-    }
-
-    fn set(&mut self, id: Identifier, ty: RcType) {
-        let last_index = self.envs.len() - 1;
-        self.envs[last_index].insert(id, ty);
-    }
-
-    fn push(&mut self) {
-        self.envs.push(HashMap::new());
-    }
-
-    fn pop(&mut self) {
-        if self.envs.len() == 1 {
-            panic!("Attempt to pop last frame");
-        }
-        self.envs.pop();
-    }
-}
+type Context = context::Context<RcType>;
 
 fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
+    #[allow(unreachable_patterns)]
     let ty = match Rc::get_mut(&mut expr.expr).unwrap() {
         Expr::Literal(ref l) => match l {
             Literal::Num(_) => Type::Int32.into(),
@@ -82,6 +48,10 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             let ty = e.ty.clone().unwrap();
             context.pop();
             ty
+        }
+        Expr::Var(ref mut id) => {
+            let ty = context.lookup(id).unwrap();
+            ty.clone()
         }
         _ => unimplemented!(),
     };

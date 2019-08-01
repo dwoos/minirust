@@ -1,7 +1,10 @@
 use crate::ast::*;
+use crate::context::Context;
 use failure::Error;
 
 use hlllvm::{LLVMBasicBlock, LLVMFunction, LLVMName::Name, LLVMType, LLVMValue, Module};
+
+type SymbolTable = Context<LLVMValue>;
 
 struct CodeGenContext {
     int_format_string: LLVMValue,
@@ -10,6 +13,7 @@ struct CodeGenContext {
     bool_true: LLVMValue,
     printf_fn: LLVMFunction,
     module: Module,
+    symtab: SymbolTable,
 }
 
 fn size(_cgc: &mut CodeGenContext, ty: RcType) -> LLVMType {
@@ -27,6 +31,7 @@ fn compile_expr(
     bb: LLVMBasicBlock,
     expr: &TypedExpr,
 ) -> (LLVMValue, LLVMBasicBlock) {
+    #[allow(unreachable_patterns)]
     match *expr.expr {
         Expr::Literal(ref l) => (
             match l {
@@ -91,11 +96,18 @@ fn compile_expr(
             (cgc.unit, bb)
         }
         Expr::Block(ref stmts, ref e) => {
+            cgc.symtab.push();
             let mut bb = bb;
             for stmt in stmts.iter() {
                 bb = compile_statement(cgc, f, bb, stmt);
             }
-            compile_expr(cgc, f, bb, e)
+            let (val, bb) = compile_expr(cgc, f, bb, e);
+            cgc.symtab.pop();
+            (val, bb)
+        }
+        Expr::Var(ref id) => {
+            let val = cgc.symtab.lookup(id).unwrap();
+            (val, bb)
         }
         _ => unimplemented!(),
     }
@@ -108,9 +120,13 @@ fn compile_statement(
     bb: LLVMBasicBlock,
     stmt: &Stmt,
 ) -> LLVMBasicBlock {
+    #[allow(unreachable_patterns)]
     match stmt {
-        Stmt::Let(None, ref e, false) => {
-            let (_, bb) = compile_expr(cgc, f, bb, e);
+        Stmt::Let(ref id, ref e, false) => {
+            let (val, bb) = compile_expr(cgc, f, bb, e);
+            if let Some(id) = id {
+                cgc.symtab.set(id.clone(), val);
+            }
             bb
         }
         _ => unimplemented!(),
@@ -124,6 +140,7 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let bool_false = module.static_bool(false);
     let bool_true = module.static_bool(true);
     let printf_fn = module.declare_function("printf", LLVMType::Int32, &[], true);
+    let symtab = SymbolTable::new();
     let mut cgc = CodeGenContext {
         int_format_string,
         unit,
@@ -131,6 +148,7 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
         bool_true,
         printf_fn,
         module,
+        symtab,
     };
     let main = cgc
         .module

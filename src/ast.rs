@@ -4,14 +4,14 @@ use std::rc::Rc;
 pub enum Type {
     Int32,
     Bool,
-    Unit
+    Unit,
 }
 
 pub type RcType = Rc<Type>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Identifier {
-    Identifier(String)
+    Identifier(String),
 }
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub enum Bop {
 pub enum Literal {
     Num(i32),
     Bool(bool),
-    Unit
+    Unit,
 }
 
 #[derive(Debug)]
@@ -34,37 +34,40 @@ pub enum Expr {
     Bop {
         bop: Bop,
         e1: TypedExpr,
-        e2: TypedExpr
+        e2: TypedExpr,
     },
     Literal(Literal),
     If {
         condition: TypedExpr,
         then: TypedExpr,
-        otherwise: TypedExpr
+        otherwise: TypedExpr,
     },
     Print(TypedExpr),
     Block(Vec<Stmt>, TypedExpr),
-    Var(Identifier)
+    Var(Identifier),
 }
 
 #[derive(Debug)]
 pub struct TypedExpr {
     pub ty: Option<RcType>,
-    pub expr: Rc<Expr>
+    pub expr: Rc<Expr>,
 }
 
 impl From<Expr> for TypedExpr {
     fn from(expr: Expr) -> TypedExpr {
-        TypedExpr { ty:None, expr: expr.into() }
+        TypedExpr {
+            ty: None,
+            expr: expr.into(),
+        }
     }
 }
 
 #[derive(Debug)]
 pub enum Stmt {
-    Let(Option<Identifier>, TypedExpr, bool)
+    Let(Option<Identifier>, TypedExpr, bool),
 }
 
 #[derive(Debug)]
 pub struct Program {
-    pub stmts: Vec<Stmt>
+    pub stmts: Vec<Stmt>,
 }

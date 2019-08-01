@@ -106,7 +106,8 @@ fn compile_expr(
             (val, bb)
         }
         Expr::Var(ref id) => {
-            let val = cgc.symtab.lookup(id).unwrap();
+            let storage = cgc.symtab.lookup(id).unwrap();
+            let val = cgc.module.load(bb, storage);
             (val, bb)
         }
         _ => unimplemented!(),
@@ -125,7 +126,10 @@ fn compile_statement(
         Stmt::Let(ref id, ref e, false) => {
             let (val, bb) = compile_expr(cgc, f, bb, e);
             if let Some(id) = id {
-                cgc.symtab.set(id.clone(), val);
+                let llvm_type = size(cgc, e.ty.clone().unwrap());
+                let storage = cgc.module.alloca(bb, llvm_type);
+                cgc.module.store(bb, val, storage);
+                cgc.symtab.set(id.clone(), storage);
             }
             bb
         }

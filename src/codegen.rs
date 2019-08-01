@@ -1,110 +1,149 @@
 use crate::ast::*;
-use crate::llvm;
 use failure::Error;
 
-use llvm_sys::prelude::*;
+use hlllvm::{LLVMBasicBlock, LLVMFunction, LLVMName::Name, LLVMType, LLVMValue, Module};
 
 struct CodeGenContext {
-    int_format_string: LLVMValueRef,
-    unit: LLVMValueRef
+    int_format_string: LLVMValue,
+    unit: LLVMValue,
+    bool_false: LLVMValue,
+    bool_true: LLVMValue,
+    printf_fn: LLVMFunction,
+    module: Module,
 }
 
-fn size(cgc: &mut CodeGenContext, ty: RcType) -> LLVMTypeRef {
+fn size(_cgc: &mut CodeGenContext, ty: RcType) -> LLVMType {
     match *ty {
-        Type::Int32 => llvm::int32_type(),
-        Type::Bool => llvm::int1_type(),
-        Type::Unit => llvm::int1_type()
+        Type::Int32 => LLVMType::Int32,
+        Type::Bool => LLVMType::Int1,
+        Type::Unit => LLVMType::Int1,
     }
 }
 
 // Returns a value and an unterminated basic block
-fn compile_expr(cgc: &mut CodeGenContext,
-                module: &mut llvm::Module,
-                f: LLVMValueRef,
-                bb: LLVMBasicBlockRef,
-                expr: &TypedExpr) -> (LLVMValueRef, LLVMBasicBlockRef) {
+fn compile_expr(
+    cgc: &mut CodeGenContext,
+    f: LLVMFunction,
+    bb: LLVMBasicBlock,
+    expr: &TypedExpr,
+) -> (LLVMValue, LLVMBasicBlock) {
     match *expr.expr {
-        Expr::Literal(ref l) => {
-            (match l {
-                Literal::Num(x) => llvm::int32(*x),
-                Literal::Bool(b) => llvm::int1(*b),
-                Literal::Unit => cgc.unit
-            }, bb)
+        Expr::Literal(ref l) => (
+            match l {
+                Literal::Num(x) => cgc.module.const_int32(*x),
+                Literal::Bool(b) => {
+                    if *b {
+                        cgc.bool_true
+                    } else {
+                        cgc.bool_false
+                    }
+                }
+                Literal::Unit => cgc.unit,
+            },
+            bb,
+        ),
+        Expr::Bop {
+            ref bop,
+            ref e1,
+            ref e2,
+        } => {
+            let (arg1, bb) = compile_expr(cgc, f, bb, e1);
+            let (arg2, bb) = compile_expr(cgc, f, bb, e2);
+            (
+                match bop {
+                    Bop::Add => cgc.module.add(bb, arg1, arg2),
+                    Bop::Sub => cgc.module.sub(bb, arg1, arg2),
+                    Bop::Mul => cgc.module.mul(bb, arg1, arg2),
+                    Bop::Div => cgc.module.sdiv(bb, arg1, arg2),
+                },
+                bb,
+            )
         }
-        Expr::Bop {ref bop, ref e1, ref e2} => {
-            let (arg1, bb) = compile_expr(cgc, module, f, bb, e1);
-            let (arg2, bb) = compile_expr(cgc, module, f, bb, e2);
-            (match bop {
-                Bop::Add => llvm::add_add(module, bb, arg1, arg2),
-                Bop::Sub => llvm::add_sub(module, bb, arg1, arg2),
-                Bop::Mul => llvm::add_mul(module, bb, arg1, arg2),
-                Bop::Div => llvm::add_sdiv(module, bb, arg1, arg2),
-            }, bb)
-        }
-        Expr::If {ref condition, ref then, ref otherwise} => {
+        Expr::If {
+            ref condition,
+            ref then,
+            ref otherwise,
+        } => {
             let llvm_type = size(cgc, expr.ty.clone().unwrap());
-            let result = llvm::add_alloca(module, bb, llvm_type);
-            let (condition_val, bb) = compile_expr(cgc, module, f, bb, condition);
-            let then_bb = llvm::add_basic_block(module, f, "");
-            let otherwise_bb = llvm::add_basic_block(module, f, "");
-            let exit_bb = llvm::add_basic_block(module, f, "");
-            llvm::add_conditional_br(module, bb, condition_val, then_bb, otherwise_bb);
-            let (then_value, then_bb) = compile_expr(cgc, module, f, then_bb, then);
-            llvm::add_store(module, then_bb, then_value, result);
-            llvm::add_br(module, then_bb, exit_bb);
-            let (otherwise_value, otherwise_bb) = compile_expr(cgc, module, f, otherwise_bb, otherwise);
-            llvm::add_store(module, otherwise_bb, otherwise_value, result);
-            llvm::add_br(module, otherwise_bb, exit_bb);
-            (llvm::add_load(module, exit_bb, result), exit_bb)
+            let result = cgc.module.alloca(bb, llvm_type);
+            let (condition_val, bb) = compile_expr(cgc, f, bb, condition);
+            let then_bb = cgc.module.add_block(f);
+            let otherwise_bb = cgc.module.add_block(f);
+            let exit_bb = cgc.module.add_block(f);
+            cgc.module
+                .conditional_br(bb, condition_val, then_bb, otherwise_bb);
+            let (then_value, then_bb) = compile_expr(cgc, f, then_bb, then);
+            cgc.module.store(then_bb, then_value, result);
+            cgc.module.br(then_bb, exit_bb);
+            let (otherwise_value, otherwise_bb) = compile_expr(cgc, f, otherwise_bb, otherwise);
+            cgc.module.store(otherwise_bb, otherwise_value, result);
+            cgc.module.br(otherwise_bb, exit_bb);
+            (cgc.module.load(exit_bb, result), exit_bb)
         }
         Expr::Print(ref e) => {
-            let arg1 = llvm::add_pointer_cast(module, bb, cgc.int_format_string,
-                                              llvm::int8_ptr_type(), "");
-            let (arg2, bb) = compile_expr(cgc, module, f, bb, e);
-            llvm::add_function_call(module, bb, "printf", &mut [arg1, arg2], "");
+            let arg1 = cgc.module.pointer_cast(
+                bb,
+                cgc.int_format_string,
+                LLVMType::pointer(LLVMType::Int8),
+            );
+            let (arg2, bb) = compile_expr(cgc, f, bb, e);
+            cgc.module.call(bb, cgc.printf_fn, &[arg1, arg2]);
             (cgc.unit, bb)
         }
         Expr::Block(ref stmts, ref e) => {
             let mut bb = bb;
             for stmt in stmts.iter() {
-                bb = compile_statement(cgc, module, f, bb, stmt);
+                bb = compile_statement(cgc, f, bb, stmt);
             }
-            compile_expr(cgc, module, f, bb, e)
+            compile_expr(cgc, f, bb, e)
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
 // Returns an unterminated basic block
-fn compile_statement(cgc: &mut CodeGenContext,
-                     module: &mut llvm::Module,
-                     f: LLVMValueRef,
-                     bb: LLVMBasicBlockRef,
-                     stmt: &Stmt) -> LLVMBasicBlockRef {
+fn compile_statement(
+    cgc: &mut CodeGenContext,
+    f: LLVMFunction,
+    bb: LLVMBasicBlock,
+    stmt: &Stmt,
+) -> LLVMBasicBlock {
     match stmt {
         Stmt::Let(None, ref e, false) => {
-            let (_, bb) = compile_expr(cgc, module, f, bb, e);
+            let (_, bb) = compile_expr(cgc, f, bb, e);
             bb
         }
-        _ => unimplemented!()
+        _ => unimplemented!(),
     }
 }
 
-
 pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
-    let mut module = llvm::create_module("main");
-    let int_format_string = llvm::add_static_string(&mut module, "%d\n", "int_format_string");
-    let unit = llvm::add_static_int1(&mut module, false);
-    let main = llvm::add_main_fn(&mut module);
-    let entry_block = llvm::add_basic_block(&mut module, main, "entry");
-    let exit_block = llvm::add_basic_block(&mut module, main, "exit");
-    llvm::add_ret(&mut module, exit_block, llvm::int32(0));
-    let mut cgc = CodeGenContext {int_format_string, unit};
+    let mut module = Module::new("main");
+    let int_format_string = module.static_string("%d\n");
+    let unit = module.static_bool(false);
+    let bool_false = module.static_bool(false);
+    let bool_true = module.static_bool(true);
+    let printf_fn = module.declare_function("printf", LLVMType::Int32, &[], true);
+    let mut cgc = CodeGenContext {
+        int_format_string,
+        unit,
+        bool_false,
+        bool_true,
+        printf_fn,
+        module,
+    };
+    let main = cgc
+        .module
+        .declare_function("main", LLVMType::Int32, &[], false);
+    let entry_block = cgc.module.add_block_named(main, Name("entry"));
+    let exit_block = cgc.module.add_block_named(main, Name("exit"));
+    let zero = cgc.module.const_int32(0);
+    cgc.module.ret(exit_block, zero);
     let mut last_block = entry_block;
     for stmt in prog.stmts.iter() {
-        last_block = compile_statement(&mut cgc, &mut module, main, last_block, stmt);
+        last_block = compile_statement(&mut cgc, main, last_block, stmt);
     }
-    llvm::add_br(&mut module, last_block, exit_block);
-    llvm::write_module(&mut module, output_file);
+    cgc.module.br(last_block, exit_block);
+    cgc.module.write(output_file);
     Ok(())
 }

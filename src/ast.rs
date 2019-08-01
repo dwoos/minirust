@@ -9,7 +9,7 @@ pub enum Type {
 
 pub type RcType = Rc<Type>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Identifier {
     Identifier(String)
 }
@@ -43,7 +43,8 @@ pub enum Expr {
         otherwise: TypedExpr
     },
     Print(TypedExpr),
-    Block(Vec<Stmt>, TypedExpr)
+    Block(Vec<Stmt>, TypedExpr),
+    Var(Identifier)
 }
 
 #[derive(Debug)]

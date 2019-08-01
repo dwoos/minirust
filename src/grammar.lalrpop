@@ -28,6 +28,7 @@ pub Term: TypedExpr = {
          => Expr::If {<>}.into(),
     "print" "(" <Expr> ")" => Expr::Print(<>).into(), 
     "(" <Expr> ")",
+    Identifier => Expr::Var(<>).into(),
     Block
 }
 

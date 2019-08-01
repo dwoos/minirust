@@ -12,6 +12,8 @@ failure_derive = "0.1.5"
 llvm-sys = "80"
 lalrpop-util = "0.16.3"
 regex = "0.2.0"
+hlllvm = { path = "../hlllvm" }
 
 [build-dependencies]
 lalrpop = "0.16.3"
+

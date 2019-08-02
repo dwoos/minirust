@@ -3,12 +3,19 @@ use crate::ast::*;
 
 grammar;
 
+pub Type: Type = {
+    "i32" => Type::Int32,
+    "bool" => Type::Bool,
+    "()" => Type::Unit
+}
+
 pub Program: Program = {
     <stmts: (<Stmt>)*> => Program {<>}
 }
 
 pub Stmt: Stmt = {
     "let" <id: Identifier> "=" <e: Expr> ";" => Stmt::Let(Some(id), e, false),
+    "let" "mut" <id: Identifier> "=" <e: Expr> ";" => Stmt::Let(Some(id), e, true),
     <e: Expr> ";" => Stmt::Let(None, e, false)
 }
 

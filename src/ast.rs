@@ -14,7 +14,7 @@ pub enum Identifier {
     Identifier(String),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Bop {
     Add,
     Sub,
@@ -22,14 +22,14 @@ pub enum Bop {
     Div,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Num(i32),
     Bool(bool),
     Unit,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
     Bop {
         bop: Bop,
@@ -47,7 +47,7 @@ pub enum Expr {
     Var(Identifier),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TypedExpr {
     pub ty: Option<RcType>,
     pub expr: Rc<Expr>,
@@ -62,12 +62,12 @@ impl From<Expr> for TypedExpr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Stmt {
     Let(Option<Identifier>, TypedExpr, bool),
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
     pub stmts: Vec<Stmt>,
 }

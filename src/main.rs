@@ -1,6 +1,11 @@
-mod ast;
-mod codegen;
 mod context;
+
+mod ast;
+
+mod parse;
+
+mod codegen;
+
 mod typecheck;
 
 use clap::{App, Arg};

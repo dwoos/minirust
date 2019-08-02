@@ -93,3 +93,51 @@ pub fn check_program(program: &mut Program) -> Result<(), Error> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parse::*;
+    use crate::typecheck::{infer_expr, Context};
+    use std::rc::Rc;
+
+    macro_rules! assert_expr_infers {
+        ($e:expr, $t: ty) => {{
+            let mut e = expr!($e);
+            let ty = Rc::new(ty!($t));
+            let mut context = Context::new();
+            infer_expr(&mut context, &mut e).expect("unexpected type error");
+            assert_eq!(e.ty.unwrap(), ty);
+        }};
+    }
+
+    macro_rules! assert_expr_ill_typed {
+        ($e:expr) => {{
+            let mut e = expr!($e);
+            let mut context = Context::new();
+            assert!(infer_expr(&mut context, &mut e).is_err());
+        }};
+    }
+
+    #[test]
+    fn test_basic_expr_typechecking() {
+        assert_expr_infers!(3, i32);
+        assert_expr_ill_typed!(3 + true);
+        assert_expr_infers!(
+            {
+                print(2);
+                3
+            },
+            i32
+        );
+        assert_expr_infers!(
+            {
+                print(2);
+                3;
+            },
+            ()
+        );
+        assert_expr_infers!(if (true) { 3 } else { 4 }, i32);
+        assert_expr_ill_typed!(if (true) { 3 } else { false });
+    }
+
+}

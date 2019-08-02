@@ -45,6 +45,7 @@ pub enum Expr {
     Print(TypedExpr),
     Block(Vec<Stmt>, TypedExpr),
     Var(Identifier),
+    Assign(TypedExpr, TypedExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]

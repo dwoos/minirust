@@ -5,7 +5,7 @@ use crate::context;
 use failure::{bail, Error};
 use std::rc::Rc;
 
-type Context = context::Context<RcType>;
+type Context = context::Context<(RcType, bool)>;
 
 fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
     #[allow(unreachable_patterns)]
@@ -52,7 +52,7 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
         Expr::Var(ref mut id) => {
             let ty = context.lookup(id);
             if let Some(ty) = ty {
-                ty.clone()
+                ty.0.clone()
             } else {
                 bail!("bad identifier {:?}", id);
             }
@@ -77,9 +77,9 @@ fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
         Stmt::Let(None, ref mut e, false) => {
             infer_expr(context, e)?;
         }
-        Stmt::Let(Some(id), ref mut e, false) => {
+        Stmt::Let(Some(id), ref mut e, is_mut) => {
             infer_expr(context, e)?;
-            context.set(id.clone(), e.ty.clone().unwrap());
+            context.set(id.clone(), (e.ty.clone().unwrap(), *is_mut));
         }
         _ => unimplemented!(),
     }
@@ -97,7 +97,7 @@ pub fn check_program(program: &mut Program) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use crate::parse::*;
-    use crate::typecheck::{infer_expr, Context};
+    use crate::typecheck::*;
     use std::rc::Rc;
 
     macro_rules! assert_expr_infers {
@@ -115,6 +115,20 @@ mod tests {
             let mut e = expr!($e);
             let mut context = Context::new();
             assert!(infer_expr(&mut context, &mut e).is_err());
+        }};
+    }
+
+    macro_rules! assert_program_well_typed {
+        ($($p:tt)*) => {{
+            let mut p = program!($($p)*);
+            assert!(check_program(&mut p).is_ok());
+        }};
+    }
+
+    macro_rules! assert_program_ill_typed {
+        ($($p:tt)*) => {{
+            let mut p = program!($($p)*);
+            assert!(check_program(&mut p).is_err());
         }};
     }
 
@@ -140,4 +154,35 @@ mod tests {
         assert_expr_ill_typed!(if (true) { 3 } else { false });
     }
 
+    #[test]
+    fn test_basic_program_typechecking() {
+        assert_program_well_typed!(
+            let x = 3;
+            print(x);
+        );
+        assert_program_ill_typed!(
+            let x = 3;
+            print(y);
+        );
+        assert_program_ill_typed!(
+            let x = 3 + true;
+            print(x);
+        );
+    }
+
+    #[test]
+    fn test_block_program_typechecking() {
+        assert_program_well_typed!(
+            let x = 3;
+            {
+                print(x);
+            };
+        );
+        assert_program_ill_typed!(
+            {
+                let x = 3;
+            };
+            print(x);
+        );
+    }
 }

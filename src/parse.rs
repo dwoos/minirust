@@ -7,7 +7,7 @@ pub fn parse_program(text: &str) -> Result<Program, Error> {
     let parsed = grammar::ProgramParser::new().parse(&text);
     match parsed {
         Ok(parsed) => Ok(parsed),
-        Err(_) => bail!("parse error"),
+        Err(s) => bail!(s.to_string()),
     }
 }
 
@@ -87,6 +87,27 @@ mod tests {
                         false
                     )
                 ]
+            }
+        );
+    }
+
+    #[test]
+    fn test_block_program_parse() {
+        let three = Expr::Literal(Literal::Num(3));
+        let unit = Expr::Literal(Literal::Unit);
+        assert_eq!(
+            program!({
+                print(3);
+            };),
+            Program {
+                stmts: vec![Stmt::Let(
+                    None,
+                    untyped(Expr::Block(
+                        vec![Stmt::Let(None, untyped(Expr::Print(untyped(three))), false)],
+                        untyped(unit)
+                    )),
+                    false
+                )]
             }
         );
     }

@@ -20,12 +20,21 @@ pub Stmt: Stmt = {
 }
 
 pub Expr: TypedExpr = {
-    <e1: Expr> <bop: Bop1> <e2: Factor> => Expr::Bop {<>}.into(),
-    Factor,
+    ExprAssign
+}
+
+pub ExprAssign: TypedExpr = {
+    <lhs: Term> "=" <rhs: ExprAssign> => Expr::Assign(<>).into(),
+    ExprBop1
+}
+
+pub ExprBop1: TypedExpr = {
+    <e1: ExprBop1> <bop: Bop1> <e2: ExprBop2> => Expr::Bop {<>}.into(),
+    ExprBop2
 };
 
-pub Factor: TypedExpr = {
-    <e1: Factor> <bop: Bop2> <e2: Term> => Expr::Bop {<>}.into(),
+pub ExprBop2: TypedExpr = {
+    <e1: ExprBop2> <bop: Bop2> <e2: Term> => Expr::Bop {<>}.into(),
     Term
 }
 
@@ -36,7 +45,8 @@ pub Term: TypedExpr = {
     "print" "(" <Expr> ")" => Expr::Print(<>).into(), 
     "(" <Expr> ")",
     Identifier => Expr::Var(<>).into(),
-    Block
+    Block,
+    
 }
 
 pub Block: TypedExpr = {

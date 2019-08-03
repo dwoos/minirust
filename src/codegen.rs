@@ -169,3 +169,38 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     cgc.module.write(output_file);
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::ast::*;
+    use crate::codegen::*;
+    use crate::parse::*;
+    use crate::typecheck::check_program;
+    use std::process;
+    use tempfile::NamedTempFile;
+
+    fn execute_program(mut prog: Program) -> String {
+        check_program(&mut prog);
+        let out_file = NamedTempFile::new().expect("temp file creation failed");
+        let out_file_path = out_file.path().to_str().unwrap();
+        compile_program(prog, out_file_path);
+        let out = process::Command::new("lli")
+            .arg(out_file_path)
+            .output()
+            .expect("process failed to execute");
+        String::from_utf8_lossy(&out.stdout).to_string()
+    }
+
+    #[test]
+    fn test_basic() {
+        assert_eq!(execute_program(program!(print(3);)), "3\n");
+        assert_eq!(
+            execute_program(program!(let x = 4;
+                                            { let x = 3;
+                                              print(x);
+                                            };
+                                            print(x);)),
+            "3\n4\n"
+        );
+    }
+}

@@ -2,7 +2,9 @@ use crate::ast::*;
 use crate::context::Context;
 use failure::Error;
 
-use hlllvm::{LLVMBasicBlock, LLVMFunction, LLVMName::Name, LLVMType, LLVMValue, Module};
+use hlllvm::{
+    LLVMBasicBlock, LLVMFunction, LLVMIBinop, LLVMName::Name, LLVMType, LLVMValue, Module,
+};
 
 type SymbolTable = Context<LLVMValue>;
 
@@ -54,15 +56,46 @@ fn compile_expr(
         } => {
             let (arg1, bb) = compile_expr(cgc, f, bb, e1);
             let (arg2, bb) = compile_expr(cgc, f, bb, e2);
-            (
-                match bop {
-                    Bop::Add => cgc.module.add(bb, arg1, arg2),
-                    Bop::Sub => cgc.module.sub(bb, arg1, arg2),
-                    Bop::Mul => cgc.module.mul(bb, arg1, arg2),
-                    Bop::Div => cgc.module.sdiv(bb, arg1, arg2),
-                },
-                bb,
-            )
+            let llvm_bop = match bop {
+                Bop::Add => LLVMIBinop::Add,
+                Bop::Sub => LLVMIBinop::Sub,
+                Bop::Mul => LLVMIBinop::Mul,
+                Bop::Div => LLVMIBinop::SDiv,
+            };
+            (cgc.module.ibinop(bb, llvm_bop, arg1, arg2), bb)
+        }
+        Expr::And(ref e1, ref e2) => {
+            let (arg1, bb) = compile_expr(cgc, f, bb, e1);
+            let (arg2, bb) = compile_expr(cgc, f, bb, e2);
+            let llvm_bop = LLVMIBinop::And;
+            (cgc.module.ibinop(bb, llvm_bop, arg1, arg2), bb)
+        }
+        Expr::Or(ref e1, ref e2) => {
+            let (arg1, bb) = compile_expr(cgc, f, bb, e1);
+            let (arg2, bb) = compile_expr(cgc, f, bb, e2);
+            let llvm_bop = LLVMIBinop::Or;
+            (cgc.module.ibinop(bb, llvm_bop, arg1, arg2), bb)
+        }
+        Expr::Not(ref e) => {
+            let (arg, bb) = compile_expr(cgc, f, bb, e);
+            (cgc.module.not(bb, arg), bb)
+        }
+        Expr::Cmp {
+            ref cmp,
+            ref e1,
+            ref e2,
+        } => {
+            let (arg1, bb) = compile_expr(cgc, f, bb, e1);
+            let (arg2, bb) = compile_expr(cgc, f, bb, e2);
+            let llvm_bop = match cmp {
+                Cmp::Eq => LLVMIBinop::Eq,
+                Cmp::Neq => LLVMIBinop::Neq,
+                Cmp::Lt => LLVMIBinop::SLt,
+                Cmp::Le => LLVMIBinop::SLe,
+                Cmp::Gt => LLVMIBinop::SGt,
+                Cmp::Ge => LLVMIBinop::SGe,
+            };
+            (cgc.module.ibinop(bb, llvm_bop, arg1, arg2), bb)
         }
         Expr::If {
             ref condition,
@@ -83,6 +116,24 @@ fn compile_expr(
             let (otherwise_value, otherwise_bb) = compile_expr(cgc, f, otherwise_bb, otherwise);
             cgc.module.store(otherwise_bb, otherwise_value, result);
             cgc.module.br(otherwise_bb, exit_bb);
+            (cgc.module.load(exit_bb, result), exit_bb)
+        }
+        Expr::While {
+            ref condition,
+            ref body,
+        } => {
+            let llvm_type = size(cgc, expr.ty.clone().unwrap());
+            let result = cgc.module.alloca(bb, llvm_type);
+            let test_bb = cgc.module.add_block(f);
+            let body_bb = cgc.module.add_block(f);
+            let exit_bb = cgc.module.add_block(f);
+            cgc.module.br(bb, test_bb);
+            let (condition_val, test_bb) = compile_expr(cgc, f, test_bb, condition);
+            cgc.module
+                .conditional_br(test_bb, condition_val, body_bb, exit_bb);
+            let (body_value, body_bb) = compile_expr(cgc, f, body_bb, body);
+            cgc.module.store(body_bb, body_value, result);
+            cgc.module.br(body_bb, test_bb);
             (cgc.module.load(exit_bb, result), exit_bb)
         }
         Expr::Print(ref e) => {
@@ -254,7 +305,7 @@ mod tests {
                     x = x - 1;
                 };
             )),
-            "3\n2\n1"
+            "3\n2\n1\n"
         );
     }
 

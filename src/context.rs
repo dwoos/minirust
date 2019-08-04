@@ -1,13 +1,18 @@
 use crate::ast::Identifier;
 use std::collections::HashMap;
+use std::fmt::Debug;
 
-pub struct Context<T> {
+#[derive(Debug)]
+pub struct Context<T>
+where
+    T: Debug + Clone,
+{
     envs: Vec<HashMap<Identifier, T>>,
 }
 
 impl<T> Context<T>
 where
-    T: Clone,
+    T: Debug + Clone,
 {
     pub fn new() -> Self {
         Self {

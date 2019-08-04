@@ -161,13 +161,48 @@ fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
     Ok(())
 }
 
+fn check_item(context: &mut Context, item: &mut Item) -> Result<(), Error> {
+    #[allow(unreachable_patterns)]
+    match item {
+        Item::Function(_, ref args, ref ret, ref mut body) => {
+            context.types.push();
+            for (name, ty) in args {
+                context.types.set(name.clone(), (ty.clone(), false));
+            }
+            check_expr(context, body, &ret.clone())?;
+            context.types.pop();
+            // this fn's type should already be in the context, no need to add it
+            Ok(())
+        }
+        _ => unimplemented!(),
+    }
+}
+
 pub fn check_program(program: &mut Program) -> Result<(), Error> {
     let mut context = Context::new();
-    unimplemented!();
-    /*
-    for stmt in program.stmts.iter_mut() {
-        check_stmt(&mut context, stmt)?;
-    }*/
+    // add declarations to top-level context
+    for item in program.items.iter() {
+        #[allow(unreachable_patterns)]
+        match item {
+            Item::Function(name, ref args, ref ret, _) => {
+                context.types.set(
+                    name.clone(),
+                    (
+                        Type::Function(
+                            args.iter().map(|(_, ty)| ty.clone()).collect(),
+                            ret.clone(),
+                        )
+                        .into(),
+                        false,
+                    ),
+                );
+            }
+            _ => unimplemented!(),
+        }
+    }
+    for item in program.items.iter_mut() {
+        check_item(&mut context, item)?;
+    }
     Ok(())
 }
 
@@ -209,6 +244,18 @@ mod tests {
         }};
     }
 
+    macro_rules! assert_main_program_well_typed {
+        ($($p:tt)*) => {{
+            assert_program_well_typed!(fn main() { $($p)* });
+        }};
+    }
+
+    macro_rules! assert_main_program_ill_typed {
+        ($($p:tt)*) => {{
+            assert_program_ill_typed!(fn main() { $($p)* });
+        }};
+    }
+
     #[test]
     fn test_basic_expr_typechecking() {
         assert_expr_infers!(3, i32);
@@ -233,15 +280,15 @@ mod tests {
 
     #[test]
     fn test_basic_program_typechecking() {
-        assert_program_well_typed!(
+        assert_main_program_well_typed!(
             let x = 3;
             print(x);
         );
-        assert_program_ill_typed!(
+        assert_main_program_ill_typed!(
             let x = 3;
             print(y);
         );
-        assert_program_ill_typed!(
+        assert_main_program_ill_typed!(
             let x = 3 + true;
             print(x);
         );
@@ -249,13 +296,13 @@ mod tests {
 
     #[test]
     fn test_block_program_typechecking() {
-        assert_program_well_typed!(
+        assert_main_program_well_typed!(
             let x = 3;
             {
                 print(x);
             };
         );
-        assert_program_ill_typed!(
+        assert_main_program_ill_typed!(
             {
                 let x = 3;
             };
@@ -265,24 +312,24 @@ mod tests {
 
     #[test]
     fn test_assignment_typechecking() {
-        assert_program_well_typed!(
+        assert_main_program_well_typed!(
             let mut x = 3;
             x = 4;
             print(x);
         );
 
-        assert_program_ill_typed!(
+        assert_main_program_ill_typed!(
             let x = 3;
             x = 4;
             print(x);
         );
 
-        assert_program_well_typed!(
+        assert_main_program_well_typed!(
             let mut x = false;
             x = true;
         );
 
-        assert_program_ill_typed!(
+        assert_main_program_ill_typed!(
             let mut x = 4;
             x = true;
         );
@@ -290,13 +337,13 @@ mod tests {
 
     #[test]
     fn test_while_typechecking() {
-        assert_program_well_typed!(while true {};);
-        assert_program_ill_typed!(while 3 {};);
+        assert_main_program_well_typed!(while true {};);
+        assert_main_program_ill_typed!(while 3 {};);
     }
 
     #[test]
     fn test_while_cmp_typechecking() {
-        assert_program_well_typed!(
+        assert_main_program_well_typed!(
             let mut x = 10;
             while x > 0 {
                 print(x);
@@ -310,4 +357,53 @@ mod tests {
         assert_expr_ill_typed!(true < false);
         assert_expr_ill_typed!(!3);
     }
+
+    #[test]
+    fn test_complex_functions_typechecking() {
+        assert_program_well_typed!(
+            fn foobar(x: i32, silly: bool) -> bool {
+                print(x);
+                silly
+            }
+        );
+        assert_program_ill_typed!(
+            fn foobar(x: i32, silly: bool) -> bool {
+                print(x);
+                silly;
+            }
+        );
+        assert_program_ill_typed!(
+            fn foobar(x: i32, silly: bool) -> bool {
+                print(x);
+                x
+            }
+        );
+    }
+
+    #[test]
+    fn test_multiple_functions_typechecking() {
+        assert_program_well_typed!(
+            fn foobar(x: i32, silly: bool) -> bool {
+                print(x);
+                silly
+            }
+
+            fn foobar_prime(y: i32, z: i32) {
+                print(y);
+                print(z);
+            }
+        );
+        assert_program_ill_typed!(
+            fn foobar(x: i32, silly: bool) -> bool {
+                print(x);
+                silly
+            }
+
+            fn foobar_prime(y: i32, z: i32) {
+                print(y);
+                print(x);
+            }
+        );
+    }
+
 }

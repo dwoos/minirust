@@ -5,6 +5,7 @@ pub enum Type {
     Int32,
     Bool,
     Unit,
+    Function(Vec<RcType>, RcType),
 }
 
 pub type RcType = Rc<Type>;

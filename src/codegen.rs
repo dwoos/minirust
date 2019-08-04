@@ -7,6 +7,7 @@ use hlllvm::{
 };
 
 type SymbolTable = Context<LLVMValue>;
+type FunctionTable = Context<LLVMFunction>;
 
 struct CodeGenContext {
     int_format_string: LLVMValue,
@@ -16,13 +17,15 @@ struct CodeGenContext {
     printf_fn: LLVMFunction,
     module: Module,
     symtab: SymbolTable,
+    functions: FunctionTable,
 }
 
-fn size(_cgc: &mut CodeGenContext, ty: RcType) -> LLVMType {
+fn size(_cgc: &CodeGenContext, ty: RcType) -> LLVMType {
     match *ty {
         Type::Int32 => LLVMType::Int32,
         Type::Bool => LLVMType::Int1,
         Type::Unit => LLVMType::Int1,
+        _ => unimplemented!(),
     }
 }
 
@@ -203,6 +206,24 @@ fn compile_statement(
     }
 }
 
+fn compile_item(cgc: &mut CodeGenContext, item: &Item) -> Result<(), Error> {
+    #[allow(unreachable_patterns)]
+    match item {
+        Item::Function(ref name, ref args, _, ref body) => {
+            let f = cgc.functions.lookup(name).unwrap();
+            cgc.symtab.push();
+            for (i, (name, _)) in args.iter().enumerate() {
+                cgc.symtab.set(name.clone(), cgc.module.param(f, i));
+            }
+            let bb = cgc.module.add_block(f);
+            let (ret, bb) = compile_expr(cgc, f, bb, body);
+            cgc.module.ret(bb, ret);
+            Ok(())
+        }
+        _ => unimplemented!(),
+    }
+}
+
 pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let mut module = Module::new("main");
     let int_format_string = module.static_string("%d\n");
@@ -211,6 +232,7 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let bool_true = module.static_bool(true);
     let printf_fn = module.declare_function("printf", LLVMType::Int32, &[], true);
     let symtab = SymbolTable::new();
+    let functions = FunctionTable::new();
     let mut cgc = CodeGenContext {
         int_format_string,
         unit,
@@ -219,21 +241,26 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
         printf_fn,
         module,
         symtab,
+        functions,
     };
-    let main = cgc
-        .module
-        .declare_function("main", LLVMType::Int32, &[], false);
-    let entry_block = cgc.module.add_block_named(main, Name("entry"));
-    let exit_block = cgc.module.add_block_named(main, Name("exit"));
-    let zero = cgc.module.const_int32(0);
-    cgc.module.ret(exit_block, zero);
-    let mut last_block = entry_block;
-    unimplemented!();
-    /*
-    for stmt in prog.stmts.iter() {
-        last_block = compile_statement(&mut cgc, main, last_block, stmt);
-    }*/
-    cgc.module.br(last_block, exit_block);
+    // add all function declarations to global context
+    for item in prog.items.iter() {
+        #[allow(unreachable_patterns)]
+        match item {
+            Item::Function(ref name, ref args, ref ret, _) => {
+                let args: Vec<_> = args.iter().map(|(_, ty)| size(&cgc, ty.clone())).collect();
+                let Identifier::Identifier(name_s) = name;
+                let ret_size = size(&cgc, ret.clone());
+                let llvm_function = cgc.module.declare_function(name_s, ret_size, &args, false);
+                cgc.functions.set(name.clone(), llvm_function);
+            }
+            _ => unimplemented!(),
+        }
+    }
+
+    for item in prog.items.iter() {
+        compile_item(&mut cgc, item)?;
+    }
     cgc.module.write(output_file);
     Ok(())
 }
@@ -260,14 +287,25 @@ mod tests {
 
     #[test]
     fn test_basic() {
-        assert_eq!(execute_program(program!(print(3);)), "3\n");
         assert_eq!(
             execute_program(program!(
-                let x = 4;
-                { let x = 3;
-                  print(x);
-                };
-                print(x);)),
+                fn main() {
+                    print(3);
+                }
+            )),
+            "3\n"
+        );
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let x = 4;
+                    {
+                        let x = 3;
+                        print(x);
+                    };
+                    print(x);
+                }
+            )),
             "3\n4\n"
         );
     }
@@ -276,22 +314,26 @@ mod tests {
     fn test_assignment() {
         assert_eq!(
             execute_program(program!(
-                let mut x = 3;
-                print(x);
-                x = 4;
-                print(x);
+                fn main() {
+                    let mut x = 3;
+                    print(x);
+                    x = 4;
+                    print(x);
+                }
             )),
             "3\n4\n"
         );
 
         assert_eq!(
             execute_program(program!(
-                let mut x = 3;
-                print(x);
-                x = x + 1;
-                print(x);
-                x = x + 2;
-                print(x);
+                fn main() {
+                    let mut x = 3;
+                    print(x);
+                    x = x + 1;
+                    print(x);
+                    x = x + 2;
+                    print(x);
+                }
             )),
             "3\n4\n6\n"
         );
@@ -301,11 +343,13 @@ mod tests {
     fn test_while_cmp() {
         assert_eq!(
             execute_program(program!(
-                let mut x = 3;
-                while x > 0 {
-                    print(x);
-                    x = x - 1;
-                };
+                fn main() {
+                    let mut x = 3;
+                    while x > 0 {
+                        print(x);
+                        x = x - 1;
+                    }
+                }
             )),
             "3\n2\n1\n"
         );

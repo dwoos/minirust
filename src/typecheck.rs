@@ -114,6 +114,20 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             context.types.pop();
             ty
         }
+        Expr::FunCall(ref mut f, ref mut args) => {
+            infer_expr(context, f)?;
+            if let &Type::Function(ref targs, ref ret) = &*f.ty.clone().unwrap() {
+                if args.len() != targs.len() {
+                    bail!("Wrong number of arguments supplied to {:?}", f);
+                }
+                for i in 0..args.len() {
+                    check_expr(context, &mut args[i], &targs[i])?;
+                }
+                ret.clone()
+            } else {
+                bail!("{:?} is not a function type", f.ty.clone())
+            }
+        }
         Expr::Var(ref mut id) => {
             let ty = context.types.lookup(id);
             if let Some(ty) = ty {
@@ -402,6 +416,82 @@ mod tests {
             fn foobar_prime(y: i32, z: i32) {
                 print(y);
                 print(x);
+            }
+        );
+    }
+
+    #[test]
+    fn test_funcall_typechecking() {
+        assert_program_well_typed!(
+            fn foo(x: i32) -> i32 {
+                if x > 3 {
+                    3
+                } else {
+                    x
+                }
+            }
+
+            fn main() {
+                print(foo(4));
+            }
+        );
+
+        assert_program_ill_typed!(
+            fn foo(x: i32) -> i32 {
+                if x > 3 {
+                    3
+                } else {
+                    x
+                }
+            }
+
+            fn main() {
+                print(foo(true));
+            }
+        );
+
+        assert_program_ill_typed!(
+            fn foo(x: i32) -> bool {
+                if x > 3 {
+                    true
+                } else {
+                    false
+                }
+            }
+
+            fn main() {
+                print(foo(3));
+            }
+        );
+    }
+
+    #[test]
+    fn test_recursion_typechecking() {
+        assert_program_well_typed!(
+            fn fact(x: i32) -> i32 {
+                if (x <= 1) {
+                    1
+                } else {
+                    x * fact(x - 1)
+                }
+            }
+        );
+
+        assert_program_well_typed!(
+            fn even(x: i32) -> bool {
+                if (x == 0) {
+                    true
+                } else {
+                    !odd(x)
+                }
+            }
+
+            fn odd(x: i32) -> bool {
+                if (x == 1) {
+                    true
+                } else {
+                    even(x - 1)
+                }
             }
         );
     }

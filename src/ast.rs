@@ -94,6 +94,11 @@ pub enum Stmt {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Item {
+    Function(Identifier, Vec<(Identifier, RcType)>, RcType, TypedExpr),
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Program {
-    pub stmts: Vec<Stmt>,
+    pub items: Vec<Item>,
 }

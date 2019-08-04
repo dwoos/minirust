@@ -163,9 +163,11 @@ fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
 
 pub fn check_program(program: &mut Program) -> Result<(), Error> {
     let mut context = Context::new();
+    unimplemented!();
+    /*
     for stmt in program.stmts.iter_mut() {
         check_stmt(&mut context, stmt)?;
-    }
+    }*/
     Ok(())
 }
 

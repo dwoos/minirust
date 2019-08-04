@@ -228,9 +228,11 @@ pub fn compile_program(prog: Program, output_file: &str) -> Result<(), Error> {
     let zero = cgc.module.const_int32(0);
     cgc.module.ret(exit_block, zero);
     let mut last_block = entry_block;
+    unimplemented!();
+    /*
     for stmt in prog.stmts.iter() {
         last_block = compile_statement(&mut cgc, main, last_block, stmt);
-    }
+    }*/
     cgc.module.br(last_block, exit_block);
     cgc.module.write(output_file);
     Ok(())

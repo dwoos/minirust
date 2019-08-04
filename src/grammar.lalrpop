@@ -10,7 +10,17 @@ pub Type: Type = {
 }
 
 pub Program: Program = {
-    <stmts: (<Stmt>)*> => Program {<>}
+    <items: (<Item>)*> => Program {<>}
+}
+
+pub Binding: (Identifier, RcType) = {
+    <id: Identifier> ":" <t: Type> => (id, t.into())
+}
+
+pub Item: Item = {
+    "fn" <id:Identifier> "(" <bindings: Comma<Binding>> ")" <ret:("->" <Type>)?> <body:Block> =>
+        Item::Function(id, bindings, ret.unwrap_or(Type::Unit).into(),
+                       body).into()
 }
 
 pub Stmt: Stmt = {
@@ -89,6 +99,17 @@ Cmp: Cmp = {
     "<=" => Cmp::Le,
     ">" => Cmp::Gt,
     ">=" => Cmp::Ge,
+};
+
+Comma<T>: Vec<T> = {
+    <v:(<T> ",")*> <e:T?> => match e {
+        None => v,
+        Some(e) => {
+            let mut v = v;
+            v.push(e);
+            v
+        }
+    }
 };
 
 Literal: Literal = {

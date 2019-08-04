@@ -68,17 +68,17 @@ mod tests {
     // expr tests
 
     #[test]
-    fn test_parse_basic_expr() {
+    fn test_basic_expr() {
         assert_eq!(expr!(3), untyped(Expr::Literal(Literal::Num(3))));
     }
 
     #[test]
-    fn test_parse_associativity() {
+    fn test_associativity() {
         assert_eq!(expr!(3 + 4 + 5), expr!(3 + (4 + 5)));
     }
 
     #[test]
-    fn test_parse_cmp_logic() {
+    fn test_cmp_logic() {
         let three = untyped(Expr::Literal(Literal::Num(3)));
         let four = untyped(Expr::Literal(Literal::Num(4)));
         assert_eq!(
@@ -138,7 +138,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_basic_program() {
+    fn test_basic_program() {
         let x = Identifier::Identifier("x".to_string());
         let y = Identifier::Identifier("y".to_string());
         let three = Expr::Literal(Literal::Num(3));
@@ -165,7 +165,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_block_program() {
+    fn test_block_program() {
         let three = Expr::Literal(Literal::Num(3));
         let unit = Expr::Literal(Literal::Unit);
         assert_eq!(
@@ -193,7 +193,7 @@ mod tests {
     // after the while loop
     #[test]
     #[rustfmt::skip]
-    fn test_parse_while() {
+    fn test_while() {
         let three = Expr::Literal(Literal::Num(3));
         let unit = Expr::Literal(Literal::Unit);
         let true_ = Expr::Literal(Literal::Bool(true));
@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_complex_function() {
+    fn test_complex_function() {
         assert_eq!(
             program!(
                 fn foobar(x: i32, silly: bool) -> bool {

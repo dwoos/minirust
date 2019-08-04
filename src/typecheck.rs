@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_expr_typechecking() {
+    fn test_basic_expr() {
         assert_expr_infers!(3, i32);
         assert_expr_ill_typed!(3 + true);
         assert_expr_infers!(
@@ -293,7 +293,7 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_program_typechecking() {
+    fn test_basic_program() {
         assert_main_program_well_typed!(
             let x = 3;
             print(x);
@@ -309,7 +309,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block_program_typechecking() {
+    fn test_block_program() {
         assert_main_program_well_typed!(
             let x = 3;
             {
@@ -325,7 +325,7 @@ mod tests {
     }
 
     #[test]
-    fn test_assignment_typechecking() {
+    fn test_assignment() {
         assert_main_program_well_typed!(
             let mut x = 3;
             x = 4;
@@ -350,13 +350,13 @@ mod tests {
     }
 
     #[test]
-    fn test_while_typechecking() {
+    fn test_while() {
         assert_main_program_well_typed!(while true {};);
         assert_main_program_ill_typed!(while 3 {};);
     }
 
     #[test]
-    fn test_while_cmp_typechecking() {
+    fn test_while_cmp() {
         assert_main_program_well_typed!(
             let mut x = 10;
             while x > 0 {
@@ -366,14 +366,14 @@ mod tests {
     }
 
     #[test]
-    fn test_logic_cmp_typechecking() {
+    fn test_logic_cmp() {
         assert_expr_infers!(!(3 == 4) && (true == false) || 3 < 4, bool);
         assert_expr_ill_typed!(true < false);
         assert_expr_ill_typed!(!3);
     }
 
     #[test]
-    fn test_complex_functions_typechecking() {
+    fn test_complex_functions() {
         assert_program_well_typed!(
             fn foobar(x: i32, silly: bool) -> bool {
                 print(x);
@@ -395,7 +395,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multiple_functions_typechecking() {
+    fn test_multiple_functions() {
         assert_program_well_typed!(
             fn foobar(x: i32, silly: bool) -> bool {
                 print(x);
@@ -421,7 +421,7 @@ mod tests {
     }
 
     #[test]
-    fn test_funcall_typechecking() {
+    fn test_funcall() {
         assert_program_well_typed!(
             fn foo(x: i32) -> i32 {
                 if x > 3 {
@@ -466,7 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_recursion_typechecking() {
+    fn test_recursion() {
         assert_program_well_typed!(
             fn fact(x: i32) -> i32 {
                 if (x <= 1) {
@@ -495,5 +495,4 @@ mod tests {
             }
         );
     }
-
 }

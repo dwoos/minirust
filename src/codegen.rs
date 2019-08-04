@@ -2,9 +2,7 @@ use crate::ast::*;
 use crate::context::Context;
 use failure::Error;
 
-use hlllvm::{
-    LLVMBasicBlock, LLVMFunction, LLVMIBinop, LLVMName::Name, LLVMType, LLVMValue, Module,
-};
+use hlllvm::{LLVMBasicBlock, LLVMFunction, LLVMIBinop, LLVMType, LLVMValue, Module};
 
 type SymbolTable = Context<LLVMValue>;
 type FunctionTable = Context<LLVMFunction>;
@@ -159,6 +157,26 @@ fn compile_expr(
             cgc.symtab.pop();
             (val, bb)
         }
+        Expr::FunCall(ref callee, ref args) => {
+            // right now, f has to be an identifier--there's no other way to get
+            // something of function type. eventually we will have closures and
+            // will need to make functions values
+            match *callee.expr {
+                Expr::Var(ref id) => {
+                    let llvm_function = cgc.functions.lookup(id).unwrap();
+                    let mut bb = bb;
+                    let mut llvm_args = vec![];
+                    for arg in args.iter() {
+                        let (val, newbb) = compile_expr(cgc, f, bb, arg);
+                        bb = newbb;
+                        llvm_args.push(val);
+                    }
+                    let res = cgc.module.call(bb, llvm_function, &llvm_args);
+                    (res, bb)
+                }
+                _ => panic!("Bad function"),
+            }
+        }
         Expr::Var(ref id) => {
             let storage = cgc.symtab.lookup(id).unwrap();
             let val = cgc.module.load(bb, storage);
@@ -212,10 +230,18 @@ fn compile_item(cgc: &mut CodeGenContext, item: &Item) -> Result<(), Error> {
         Item::Function(ref name, ref args, _, ref body) => {
             let f = cgc.functions.lookup(name).unwrap();
             cgc.symtab.push();
-            for (i, (name, _)) in args.iter().enumerate() {
-                cgc.symtab.set(name.clone(), cgc.module.param(f, i));
-            }
             let bb = cgc.module.add_block(f);
+            for (i, (name, ty)) in args.iter().enumerate() {
+                // llvm parameters are values, not locations. note that if we
+                // try to use the value directly it segfaults--this is a bug in
+                // hlllvm. Regardless, we need to allocate a variable to store
+                // the incoming value.
+                let arg_llvm_type = size(cgc, ty.clone());
+                let param = cgc.module.alloca(bb, arg_llvm_type);
+                let param_val = cgc.module.param(f, i);
+                cgc.module.store(bb, param_val, param);
+                cgc.symtab.set(name.clone(), param);
+            }
             let (ret, bb) = compile_expr(cgc, f, bb, body);
             cgc.module.ret(bb, ret);
             Ok(())
@@ -355,4 +381,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_funcall() {
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let x = 3;
+                    let y = 4;
+                    print(add(x, y));
+                    print(x);
+                    print(y);
+                }
+
+                fn add(x: i32, y: i32) -> i32 {
+                    x + y
+                }
+            )),
+            "7\n3\n4\n"
+        );
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_recursion() {
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let mut x = 0;
+                    while x < 6 {
+                        print(fac(x));
+                        x = x + 1;
+                    };
+                }
+
+                fn fac(x: i32) -> i32 {
+                    if x <= 1 {
+                        1
+                    } else {
+                        x * fac(x - 1)
+                    }
+                }
+            )),
+            "1\n1\n2\n6\n24\n120\n"
+        );
+    }
 }

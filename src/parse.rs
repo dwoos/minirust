@@ -112,4 +112,84 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_while_parse() {
+        let three = Expr::Literal(Literal::Num(3));
+        let unit = Expr::Literal(Literal::Unit);
+        let true_ = Expr::Literal(Literal::Bool(true));
+        assert_eq!(
+            program!(
+                while true {
+                    print(3);
+                };),
+            Program {
+                stmts: vec![Stmt::Let(
+                    None,
+                    untyped(Expr::While {
+                        condition: untyped(true_),
+                        body: untyped(Expr::Block(
+                            vec![Stmt::Let(None, untyped(Expr::Print(untyped(three))), false)],
+                            untyped(unit)
+                        ))
+                    }),
+                    false
+                )]
+            }
+        );
+    }
+
+    #[test]
+    fn test_associativity() {
+        assert_eq!(expr!(3 + 4 + 5), expr!(3 + (4 + 5)));
+    }
+
+    #[test]
+    fn test_cmp_logic() {
+        let three = untyped(Expr::Literal(Literal::Num(3)));
+        let four = untyped(Expr::Literal(Literal::Num(4)));
+        assert_eq!(
+            expr!((3 == 4 || 3 != 4) && (3 < 4 || 3 <= 4 || 3 > 4 || !(3 >= 4))),
+            untyped(Expr::And(
+                untyped(Expr::Or(
+                    untyped(Expr::Cmp {
+                        cmp: Cmp::Eq,
+                        e1: three.clone(),
+                        e2: four.clone()
+                    }),
+                    untyped(Expr::Cmp {
+                        cmp: Cmp::Neq,
+                        e1: three.clone(),
+                        e2: four.clone()
+                    })
+                )),
+                untyped(Expr::Or(
+                    untyped(Expr::Cmp {
+                        cmp: Cmp::Lt,
+                        e1: three.clone(),
+                        e2: four.clone()
+                    }),
+                    untyped(Expr::Or(
+                        untyped(Expr::Cmp {
+                            cmp: Cmp::Le,
+                            e1: three.clone(),
+                            e2: four.clone()
+                        }),
+                        untyped(Expr::Or(
+                            untyped(Expr::Cmp {
+                                cmp: Cmp::Gt,
+                                e1: three.clone(),
+                                e2: four.clone()
+                            }),
+                            untyped(Expr::Not(untyped(Expr::Cmp {
+                                cmp: Cmp::Ge,
+                                e1: three.clone(),
+                                e2: four.clone()
+                            })))
+                        ))
+                    ))
+                ))
+            ))
+        );
+    }
+
 }

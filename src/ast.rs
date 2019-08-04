@@ -23,6 +23,16 @@ pub enum Bop {
 }
 
 #[derive(Debug, PartialEq, Clone)]
+pub enum Cmp {
+    Eq,
+    Neq,
+    Le,
+    Lt,
+    Ge,
+    Gt,
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
     Num(i32),
     Bool(bool),
@@ -31,21 +41,36 @@ pub enum Literal {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expr {
+    Literal(Literal),
+
     Bop {
         bop: Bop,
         e1: TypedExpr,
         e2: TypedExpr,
     },
-    Literal(Literal),
+    Cmp {
+        cmp: Cmp,
+        e1: TypedExpr,
+        e2: TypedExpr,
+    },
+    Not(TypedExpr),
+    Or(TypedExpr, TypedExpr),
+    And(TypedExpr, TypedExpr),
     If {
         condition: TypedExpr,
         then: TypedExpr,
         otherwise: TypedExpr,
     },
-    Print(TypedExpr),
-    Block(Vec<Stmt>, TypedExpr),
+    While {
+        condition: TypedExpr,
+        body: TypedExpr,
+    },
+
     Var(Identifier),
     Assign(TypedExpr, TypedExpr),
+
+    Print(TypedExpr),
+    Block(Vec<Stmt>, TypedExpr),
 }
 
 #[derive(Debug, PartialEq, Clone)]

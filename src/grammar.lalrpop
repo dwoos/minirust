@@ -24,25 +24,43 @@ pub Expr: TypedExpr = {
 }
 
 pub ExprAssign: TypedExpr = {
-    <lhs: Term> "=" <rhs: ExprAssign> => Expr::Assign(<>).into(),
+    <lhs: ExprAssign> "=" <rhs: ExprOr> => Expr::Assign(<>).into(),
+    ExprOr
+}
+
+pub ExprOr: TypedExpr = {
+    <e1: ExprAnd> "||" <e2: ExprOr> => Expr::Or(<>).into(),
+    ExprAnd
+}
+
+pub ExprAnd: TypedExpr = {
+    <e1: ExprCmp> "&&" <e2: ExprAnd> => Expr::And(<>).into(),
+    ExprCmp
+}
+
+
+pub ExprCmp: TypedExpr = {
+    <e1: ExprBop1> <cmp: Cmp> <e2: ExprCmp> => Expr::Cmp {<>}.into(),
     ExprBop1
 }
 
 pub ExprBop1: TypedExpr = {
-    <e1: ExprBop1> <bop: Bop1> <e2: ExprBop2> => Expr::Bop {<>}.into(),
+    <e1: ExprBop2> <bop: Bop1> <e2: ExprBop1> => Expr::Bop {<>}.into(),
     ExprBop2
 };
 
 pub ExprBop2: TypedExpr = {
-    <e1: ExprBop2> <bop: Bop2> <e2: Term> => Expr::Bop {<>}.into(),
+    <e1: Term> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
     Term
 }
 
 pub Term: TypedExpr = {
     Literal => Expr::Literal(<>).into(),
     "if" <condition: Expr> <then:Block> "else" <otherwise:Block>
-         => Expr::If {<>}.into(),
+        => Expr::If {<>}.into(),
+    "while" <condition:Expr> <body:Block> => Expr::While {<>}.into(),
     "print" "(" <Expr> ")" => Expr::Print(<>).into(), 
+    "!" <Term> => Expr::Not(<>).into(),
     "(" <Expr> ")",
     Identifier => Expr::Var(<>).into(),
     Block,
@@ -62,6 +80,15 @@ Bop1: Bop = {
 Bop2: Bop = { 
     "*" => Bop::Mul,
     "/" => Bop::Div,
+};
+
+Cmp: Cmp = {
+    "==" => Cmp::Eq,
+    "!=" => Cmp::Neq,
+    "<" => Cmp::Lt,
+    "<=" => Cmp::Le,
+    ">" => Cmp::Gt,
+    ">=" => Cmp::Ge,
 };
 
 Literal: Literal = {

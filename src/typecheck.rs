@@ -5,7 +5,35 @@ use crate::context;
 use failure::{bail, Error};
 use std::rc::Rc;
 
-type Context = context::Context<(RcType, bool)>;
+struct Context {
+    types: context::Context<(RcType, bool)>,
+}
+
+impl Context {
+    fn new() -> Context {
+        Context {
+            types: context::Context::new(),
+        }
+    }
+}
+
+fn check_lhs(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
+    match Rc::get_mut(&mut expr.expr).unwrap() {
+        Expr::Var(ref id) => {
+            let ty = context.types.lookup(id);
+            if let Some(ty) = ty {
+                if ty.1 {
+                    return Ok(());
+                } else {
+                    bail!("{:?} is not mutable", expr);
+                }
+            } else {
+                bail!("Variable {:?} used before being defined");
+            }
+        }
+        _ => bail!("Invalid lhs {:?}", expr),
+    }
+}
 
 fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
     #[allow(unreachable_patterns)]
@@ -24,6 +52,35 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             check_expr(context, e2, &Type::Int32.into())?;
             Type::Int32.into()
         }
+        Expr::Cmp {
+            ref cmp,
+            ref mut e1,
+            ref mut e2,
+        } => {
+            match cmp {
+                Cmp::Eq | Cmp::Neq => {
+                    // e1 and e2 have to be the same type
+                    infer_expr(context, e1)?;
+                    check_expr(context, e2, &e1.ty.clone().unwrap())?;
+                    Type::Bool.into()
+                }
+                Cmp::Lt | Cmp::Le | Cmp::Gt | Cmp::Ge => {
+                    // both args have to be numbers
+                    check_expr(context, e1, &Type::Int32.into())?;
+                    check_expr(context, e2, &Type::Int32.into())?;
+                    Type::Bool.into()
+                }
+            }
+        }
+        Expr::Or(ref mut e1, ref mut e2) | Expr::And(ref mut e1, ref mut e2) => {
+            check_expr(context, e1, &Type::Bool.into())?;
+            check_expr(context, e2, &Type::Bool.into())?;
+            Type::Bool.into()
+        }
+        Expr::Not(ref mut e) => {
+            check_expr(context, e, &Type::Bool.into())?;
+            Type::Bool.into()
+        }
         Expr::If {
             ref mut condition,
             ref mut then,
@@ -35,27 +92,43 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             check_expr(context, otherwise, &ty)?;
             ty
         }
+        Expr::While {
+            ref mut condition,
+            ref mut body,
+        } => {
+            check_expr(context, condition, &Type::Bool.into())?;
+            infer_expr(context, body)?;
+            body.ty.clone().unwrap()
+        }
         Expr::Print(ref mut e) => {
             check_expr(context, e, &Type::Int32.into())?;
             Type::Unit.into()
         }
         Expr::Block(ref mut stmts, ref mut e) => {
-            context.push();
+            context.types.push();
             for stmt in stmts.iter_mut() {
                 check_stmt(context, stmt)?;
             }
             infer_expr(context, e)?;
             let ty = e.ty.clone().unwrap();
-            context.pop();
+            context.types.pop();
             ty
         }
         Expr::Var(ref mut id) => {
-            let ty = context.lookup(id);
+            let ty = context.types.lookup(id);
             if let Some(ty) = ty {
                 ty.0.clone()
             } else {
                 bail!("bad identifier {:?}", id);
             }
+        }
+        Expr::Assign(ref mut lhs, ref mut rhs) => {
+            // lhs needs to be a valid left-hand side. for now, that means it
+            // has to be a variable.
+            infer_expr(context, lhs)?;
+            check_lhs(context, lhs)?;
+            check_expr(context, rhs, &lhs.ty.clone().unwrap())?;
+            Type::Unit.into()
         }
         _ => unimplemented!(),
     };
@@ -79,7 +152,9 @@ fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
         }
         Stmt::Let(Some(id), ref mut e, is_mut) => {
             infer_expr(context, e)?;
-            context.set(id.clone(), (e.ty.clone().unwrap(), *is_mut));
+            context
+                .types
+                .set(id.clone(), (e.ty.clone().unwrap(), *is_mut));
         }
         _ => unimplemented!(),
     }
@@ -184,5 +259,53 @@ mod tests {
             };
             print(x);
         );
+    }
+
+    #[test]
+    fn test_assignment_typechecking() {
+        assert_program_well_typed!(
+            let mut x = 3;
+            x = 4;
+            print(x);
+        );
+
+        assert_program_ill_typed!(
+            let x = 3;
+            x = 4;
+            print(x);
+        );
+
+        assert_program_well_typed!(
+            let mut x = false;
+            x = true;
+        );
+
+        assert_program_ill_typed!(
+            let mut x = 4;
+            x = true;
+        );
+    }
+
+    #[test]
+    fn test_while_typechecking() {
+        assert_program_well_typed!(while true {};);
+        assert_program_ill_typed!(while 3 {};);
+    }
+
+    #[test]
+    fn test_while_cmp_typechecking() {
+        assert_program_well_typed!(
+            let mut x = 10;
+            while x > 0 {
+                print(x);
+                x = x - 1;
+            };);
+    }
+
+    #[test]
+    fn test_logic_cmp_typechecking() {
+        assert_expr_infers!(!(3 == 4) && (true == false) || 3 < 4, bool);
+        assert_expr_ill_typed!(true < false);
+        assert_expr_ill_typed!(!3);
     }
 }

@@ -110,6 +110,18 @@ fn compile_expr(
             let val = cgc.module.load(bb, storage);
             (val, bb)
         }
+        Expr::Assign(ref lhs, ref rhs) => {
+            match *lhs.expr {
+                Expr::Var(ref id) => {
+                    let storage = cgc.symtab.lookup(id).unwrap();
+                    let (val, bb) = compile_expr(cgc, f, bb, rhs);
+                    cgc.module.store(bb, val, storage);
+                    // assignments return the unit value
+                    (cgc.unit, bb)
+                }
+                _ => panic!("Bad assignment"),
+            }
+        }
         _ => unimplemented!(),
     }
 }
@@ -123,7 +135,10 @@ fn compile_statement(
 ) -> LLVMBasicBlock {
     #[allow(unreachable_patterns)]
     match stmt {
-        Stmt::Let(ref id, ref e, false) => {
+        // we can ignore mutability here--it only matters for the
+        // typechecker. If a program typechecks, it isn't mutating anything it
+        // isn't supposed to.
+        Stmt::Let(ref id, ref e, _) => {
             let (val, bb) = compile_expr(cgc, f, bb, e);
             if let Some(id) = id {
                 let llvm_type = size(cgc, e.ty.clone().unwrap());
@@ -203,4 +218,44 @@ mod tests {
             "3\n4\n"
         );
     }
+
+    #[test]
+    fn test_assignment() {
+        assert_eq!(
+            execute_program(program!(
+                let mut x = 3;
+                print(x);
+                x = 4;
+                print(x);
+            )),
+            "3\n4\n"
+        );
+
+        assert_eq!(
+            execute_program(program!(
+                let mut x = 3;
+                print(x);
+                x = x + 1;
+                print(x);
+                x = x + 2;
+                print(x);
+            )),
+            "3\n4\n6\n"
+        );
+    }
+
+    #[test]
+    fn test_while_cmp() {
+        assert_eq!(
+            execute_program(program!(
+                let mut x = 3;
+                while x > 0 {
+                    print(x);
+                    x = x - 1;
+                };
+            )),
+            "3\n2\n1"
+        );
+    }
+
 }

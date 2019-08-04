@@ -23,7 +23,7 @@ pub fn parse_expr(text: &str) -> Result<TypedExpr, Error> {
     let parsed = grammar::ExprParser::new().parse(&text);
     match parsed {
         Ok(parsed) => Ok(parsed),
-        Err(_) => bail!("parse error"),
+        Err(e) => bail!(e.to_string()),
     }
 }
 

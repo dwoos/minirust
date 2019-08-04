@@ -70,6 +70,7 @@ pub enum Expr {
     Var(Identifier),
     Assign(TypedExpr, TypedExpr),
 
+    FunCall(TypedExpr, Vec<TypedExpr>),
     Print(TypedExpr),
     Block(Vec<Stmt>, TypedExpr),
 }

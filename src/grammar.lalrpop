@@ -48,7 +48,6 @@ pub ExprAnd: TypedExpr = {
     ExprCmp
 }
 
-
 pub ExprCmp: TypedExpr = {
     <e1: ExprBop1> <cmp: Cmp> <e2: ExprCmp> => Expr::Cmp {<>}.into(),
     ExprBop1
@@ -60,7 +59,12 @@ pub ExprBop1: TypedExpr = {
 };
 
 pub ExprBop2: TypedExpr = {
-    <e1: Term> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
+    <e1: ExprNot> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
+    ExprNot
+}
+
+pub ExprNot: TypedExpr = {
+    "!" <ExprNot> => Expr::Not(<>).into(),
     Term
 }
 
@@ -70,7 +74,9 @@ pub Term: TypedExpr = {
         => Expr::If {<>}.into(),
     "while" <condition:Expr> <body:Block> => Expr::While {<>}.into(),
     "print" "(" <Expr> ")" => Expr::Print(<>).into(), 
-    "!" <Term> => Expr::Not(<>).into(),
+    // funcalls
+    //<name:Term> "(" ")" => Expr::Funcall(name, vec![]).into(),
+    <Term> "(" <Comma<Expr>> ")" => Expr::FunCall(<>).into(),
     "(" <Expr> ")",
     Identifier => Expr::Var(<>).into(),
     Block,

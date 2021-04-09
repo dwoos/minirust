@@ -1,7 +1,6 @@
 use crate::ast::*;
 use crate::grammar;
 use failure::{bail, Error};
-use std::rc::Rc;
 
 pub fn parse_program(text: &str) -> Result<Program, Error> {
     let parsed = grammar::ProgramParser::new().parse(&text);
@@ -19,6 +18,7 @@ macro_rules! program {
     };
 }
 
+#[cfg(test)]
 pub fn parse_expr(text: &str) -> Result<TypedExpr, Error> {
     let parsed = grammar::ExprParser::new().parse(&text);
     match parsed {
@@ -27,10 +27,11 @@ pub fn parse_expr(text: &str) -> Result<TypedExpr, Error> {
     }
 }
 
+#[cfg(test)]
 pub fn untyped(e: Expr) -> TypedExpr {
     TypedExpr {
         ty: None,
-        expr: Rc::new(e),
+        expr: std::rc::Rc::new(e),
     }
 }
 
@@ -42,6 +43,7 @@ macro_rules! expr {
     };
 }
 
+#[cfg(test)]
 pub fn parse_type(text: &str) -> Result<Type, Error> {
     let parsed = grammar::TypeParser::new().parse(&text);
     match parsed {
@@ -249,5 +251,4 @@ mod tests {
             }
         );
     }
-
 }

@@ -36,9 +36,7 @@ fn main() {
         std::fs::read_to_string(matches.value_of("INPUT").unwrap()).expect("error reading input");
 
     let output_file = matches.value_of("OUTPUT").unwrap();
-    let mut parsed = grammar::ProgramParser::new()
-        .parse(&input)
-        .expect("parse error");
+    let mut parsed = parse::parse_program(&input).expect("parse error");
     typecheck::check_program(&mut parsed).expect("type error");
     println!("{:?}", parsed);
     codegen::compile_program(parsed, std::path::Path::new(output_file)).expect("compile error");

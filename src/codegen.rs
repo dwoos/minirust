@@ -1,6 +1,6 @@
 use crate::ast::*;
 use crate::context::Context;
-use failure::Error;
+use failure::{format_err, Error};
 
 use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
@@ -375,7 +375,9 @@ pub fn compile_program(prog: Program, output_file: &std::path::Path) -> Result<(
     for item in prog.items.iter() {
         compile_item(&mut cgc, item)?;
     }
-    cgc.module.print_to_file(output_file);
+    cgc.module
+        .print_to_file(output_file)
+        .or(Err(format_err!("Error writing to file")))?;
     Ok(())
 }
 

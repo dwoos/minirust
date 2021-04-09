@@ -10,11 +10,11 @@ clap = "2.32.0"
 failure = "0.1.5"
 failure_derive = "0.1.5"
 llvm-sys = "80"
-lalrpop-util = "0.16.3"
+lalrpop-util = "0.19"
 regex = "0.2.0"
 hlllvm = { git = "https://github.com/dwoos/hlllvm.git" }
 tempfile = "3.1"
 
 [build-dependencies]
-lalrpop = "0.16.3"
+lalrpop = "0.19"
 

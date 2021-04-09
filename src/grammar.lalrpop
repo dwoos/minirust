@@ -6,7 +6,7 @@ grammar;
 pub Type: Type = {
     "i32" => Type::Int32,
     "bool" => Type::Bool,
-    "()" => Type::Unit
+    "(" ")" => Type::Unit
 }
 
 pub Program: Program = {

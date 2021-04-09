@@ -41,5 +41,5 @@ fn main() {
         .expect("parse error");
     typecheck::check_program(&mut parsed).expect("type error");
     println!("{:?}", parsed);
-    codegen::compile_program(parsed, output_file).expect("compile error");
+    codegen::compile_program(parsed, std::path::Path::new(output_file)).expect("compile error");
 }

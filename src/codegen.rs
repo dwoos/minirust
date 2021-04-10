@@ -393,7 +393,7 @@ pub fn compile_program(prog: Program, output_file: &std::path::Path) -> Result<(
             Item::Function(ref name, ref args, ref ret, _) => {
                 let args: Vec<_> = args.iter().map(|(_, ty)| size(&cgc, ty.clone())).collect();
                 let Identifier::Identifier(name_s) = name;
-                let ret_size = size(&cgc, ret.clone()).into_int_type();
+                let ret_size = size(&cgc, ret.clone());
                 let llvm_function =
                     cgc.module
                         .add_function(name_s, ret_size.fn_type(&args, false), None);

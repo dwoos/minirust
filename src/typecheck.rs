@@ -17,20 +17,10 @@ impl Context {
     }
 }
 
-fn check_lhs(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
-    match Rc::get_mut(&mut expr.expr).unwrap() {
-        Expr::Var(ref id) => {
-            let ty = context.types.lookup(id);
-            if let Some(ty) = ty {
-                if ty.1 {
-                    return Ok(());
-                } else {
-                    bail!("{:?} is not mutable", expr);
-                }
-            } else {
-                bail!("Variable {:?} used before being defined");
-            }
-        }
+fn check_place_expr(_context: &mut Context, expr: &TypedExpr) -> Result<(), Error> {
+    match &*expr.expr {
+        Expr::Var(_) => Ok(()),
+        Expr::Deref(_) => Ok(()),
         _ => bail!("Invalid lhs {:?}", expr),
     }
 }
@@ -137,12 +127,23 @@ fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> 
             }
         }
         Expr::Assign(ref mut lhs, ref mut rhs) => {
-            // lhs needs to be a valid left-hand side. for now, that means it
-            // has to be a variable.
+            // lhs needs to be a valid left-hand side
             infer_expr(context, lhs)?;
-            check_lhs(context, lhs)?;
+            check_place_expr(context, lhs)?;
             check_expr(context, rhs, &lhs.ty.clone().unwrap())?;
             Type::Unit.into()
+        }
+        Expr::Borrow(ref mut e, is_mut) => {
+            infer_expr(context, e)?;
+            Type::Borrow(e.ty.clone().unwrap(), *is_mut).into()
+        }
+        Expr::Deref(ref mut e) => {
+            infer_expr(context, e)?;
+            if let Type::Borrow(ref ty, _) = *e.ty.clone().unwrap() {
+                ty.clone()
+            } else {
+                bail!("{:?} is not a borrow", e.ty.clone());
+            }
         }
         _ => unimplemented!(),
     };
@@ -332,7 +333,8 @@ mod tests {
             print(x);
         );
 
-        assert_main_program_ill_typed!(
+        // We don't check mutability in the typechecker
+        assert_main_program_well_typed!(
             let x = 3;
             x = 4;
             print(x);
@@ -492,6 +494,51 @@ mod tests {
                 } else {
                     even(x - 1)
                 }
+            }
+        );
+    }
+
+    #[test]
+    fn test_borrows_derefs() {
+        assert_program_well_typed!(
+            fn main(x: &i32) -> i32 {
+                let y = *x;
+                y
+            }
+        );
+        assert_program_ill_typed!(
+            fn main(x: &i32) -> i32 {
+                let y = **x;
+                y
+            }
+        );
+        assert_program_well_typed!(
+            fn main(x: &i32) -> i32 {
+                *x = 4;
+                *x
+            }
+        );
+        assert_program_ill_typed!(
+            fn main(x: &i32) -> () {
+                **x = 4;
+            }
+        );
+
+        assert_program_ill_typed!(
+            fn main(x: &mut &i32) -> () {
+                *x = 4;
+            }
+        );
+
+        assert_program_well_typed!(
+            fn main() -> () {
+                *&5 = 4;
+            }
+        );
+
+        assert_program_ill_typed!(
+            fn main() -> () {
+                *&5 = true;
             }
         );
     }

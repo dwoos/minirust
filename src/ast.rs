@@ -6,6 +6,7 @@ pub enum Type {
     Bool,
     Unit,
     Function(Vec<RcType>, RcType),
+    Borrow(RcType, bool),
 }
 
 pub type RcType = Rc<Type>;
@@ -55,6 +56,8 @@ pub enum Expr {
         e2: TypedExpr,
     },
     Not(TypedExpr),
+    Borrow(TypedExpr, bool),
+    Deref(TypedExpr),
     Or(TypedExpr, TypedExpr),
     And(TypedExpr, TypedExpr),
     If {

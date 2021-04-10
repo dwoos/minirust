@@ -251,4 +251,53 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn test_borrows() {
+        assert_eq!(
+            program!(
+                fn main(a: &mut i32) -> () {
+                    let x = 3;
+                    let y = &x;
+                    let z = &mut y;
+                }
+            ),
+            Program {
+                items: vec![Item::Function(
+                    Identifier::Identifier("main".to_string()),
+                    vec![(
+                        Identifier::Identifier("a".to_string()),
+                        Type::Borrow(Type::Int32.into(), true).into()
+                    )],
+                    Type::Unit.into(),
+                    untyped(Expr::Block(
+                        vec![
+                            Stmt::Let(
+                                Some(Identifier::Identifier("x".to_string())),
+                                untyped(Expr::Literal(Literal::Num(3))),
+                                false
+                            ),
+                            Stmt::Let(
+                                Some(Identifier::Identifier("y".to_string())),
+                                untyped(Expr::Borrow(
+                                    untyped(Expr::Var(Identifier::Identifier("x".to_string()))),
+                                    false
+                                )),
+                                false
+                            ),
+                            Stmt::Let(
+                                Some(Identifier::Identifier("z".to_string())),
+                                untyped(Expr::Borrow(
+                                    untyped(Expr::Var(Identifier::Identifier("y".to_string()))),
+                                    true
+                                )),
+                                false
+                            )
+                        ],
+                        untyped(Expr::Literal(Literal::Unit))
+                    ))
+                )]
+            }
+        );
+    }
 }

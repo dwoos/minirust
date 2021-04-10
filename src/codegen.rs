@@ -6,7 +6,7 @@ use inkwell::basic_block::BasicBlock;
 use inkwell::builder::Builder;
 use inkwell::context::Context as LLVMContext;
 use inkwell::module::Module;
-use inkwell::types::BasicTypeEnum;
+use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 
 type SymbolTable<'a> = Context<PointerValue<'a>>;
@@ -26,10 +26,14 @@ struct CodeGenContext<'a, 'ctx> {
 }
 
 fn size<'a, 'ctx>(cgc: &'a CodeGenContext<'a, 'ctx>, ty: RcType) -> BasicTypeEnum<'ctx> {
-    match *ty {
+    match &*ty {
         Type::Int32 => cgc.context.i32_type().into(),
         Type::Bool => cgc.context.bool_type().into(),
         Type::Unit => cgc.context.bool_type().into(),
+        Type::Borrow(ref t, _) => {
+            let sizet = size(cgc, t.clone());
+            sizet.ptr_type(inkwell::AddressSpace::Generic).into()
+        }
         _ => unimplemented!(),
     }
 }
@@ -247,6 +251,25 @@ fn compile_expr<'a, 'ctx>(
             let val = cgc.builder.build_load(storage, "");
             (val, bb)
         }
+        Expr::Borrow(ref e, _) => match *e.expr {
+            Expr::Var(ref id) => (cgc.symtab.lookup(id).unwrap().into(), bb),
+            Expr::Deref(ref e) => compile_expr(cgc, f, bb, e),
+            _ => {
+                let (val, bb) = compile_expr(cgc, f, bb, e);
+                // non-place expr; make a temporary location
+                let llvm_type = size(cgc, e.ty.clone().unwrap());
+                cgc.builder.position_at_end(bb);
+                let storage = cgc.builder.build_alloca(llvm_type, "tmp");
+                cgc.builder.build_store(storage, val);
+                (storage.into(), bb)
+            }
+        },
+        Expr::Deref(ref e) => {
+            let (storage, bb) = compile_expr(cgc, f, bb, e);
+            cgc.builder.position_at_end(bb);
+            let val = cgc.builder.build_load(storage.into_pointer_value(), "");
+            (val, bb)
+        }
         Expr::Assign(ref lhs, ref rhs) => {
             match *lhs.expr {
                 Expr::Var(ref id) => {
@@ -254,6 +277,14 @@ fn compile_expr<'a, 'ctx>(
                     let (val, bb) = compile_expr(cgc, f, bb, rhs);
                     cgc.builder.position_at_end(bb);
                     cgc.builder.build_store(storage, val);
+                    // assignments return the unit value
+                    (cgc.unit, bb)
+                }
+                Expr::Deref(ref e) => {
+                    let (val, bb) = compile_expr(cgc, f, bb, rhs);
+                    let (storage, bb) = compile_expr(cgc, f, bb, e);
+                    cgc.builder.position_at_end(bb);
+                    cgc.builder.build_store(storage.into_pointer_value(), val);
                     // assignments return the unit value
                     (cgc.unit, bb)
                 }
@@ -513,6 +544,46 @@ mod tests {
                 }
             )),
             "1\n1\n2\n6\n24\n120\n"
+        );
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_borrows_derefs_no_assignment() {
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let x = 5;
+                    let y = &x;
+                    print(*y);
+                }
+            )),
+            "5\n"
+        );
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let x = &5;
+                    print(*x);
+                }
+            )),
+            "5\n"
+        );
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_borrows_derefs() {
+        assert_eq!(
+            execute_program(program!(
+                fn main() {
+                    let mut x = 5;
+                    let y = &mut x;
+                    *y = 6;
+                    print(x);
+                }
+            )),
+            "6\n"
         );
     }
 }

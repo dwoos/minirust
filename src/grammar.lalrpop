@@ -6,7 +6,9 @@ grammar;
 pub Type: Type = {
     "i32" => Type::Int32,
     "bool" => Type::Bool,
-    "(" ")" => Type::Unit
+    "(" ")" => Type::Unit,
+    "&" <t: Type> => Type::Borrow(t.into(), false),
+    "&" "mut" <t: Type> => Type::Borrow(t.into(), true)
 }
 
 pub Program: Program = {
@@ -59,12 +61,17 @@ pub ExprBop1: TypedExpr = {
 };
 
 pub ExprBop2: TypedExpr = {
-    <e1: ExprNot> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
-    ExprNot
+    <e1: ExprUnary> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
+    ExprUnary
 }
 
-pub ExprNot: TypedExpr = {
-    "!" <ExprNot> => Expr::Not(<>).into(),
+pub ExprUnary: TypedExpr = {
+    "!" <ExprUnary> => Expr::Not(<>).into(),
+    "&" <ExprUnary> => Expr::Borrow(<>, false).into(),
+    "&" "mut" <ExprUnary> => Expr::Borrow(<>, true).into(),
+    "&&" <ExprUnary> => Expr::Borrow(Expr::Borrow(<>, false).into(), false).into(),
+    "&&" "mut" <ExprUnary> => Expr::Borrow(Expr::Borrow(<>, true).into(), false).into(),
+    "*" <ExprUnary> => Expr::Deref(<>).into(),
     Term
 }
 

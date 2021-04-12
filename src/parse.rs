@@ -2,7 +2,7 @@ use crate::ast::*;
 use crate::grammar;
 use failure::{bail, Error};
 
-pub fn parse_program(text: &str) -> Result<Program, Error> {
+pub fn parse_program(text: &str) -> Result<BaseProgram, Error> {
     let parsed = grammar::ProgramParser::new().parse(&text);
     match parsed {
         Ok(parsed) => Ok(parsed),
@@ -19,19 +19,11 @@ macro_rules! program {
 }
 
 #[cfg(test)]
-pub fn parse_expr(text: &str) -> Result<TypedExpr, Error> {
+pub fn parse_expr(text: &str) -> Result<BaseExpr, Error> {
     let parsed = grammar::ExprParser::new().parse(&text);
     match parsed {
         Ok(parsed) => Ok(parsed),
         Err(e) => bail!(e.to_string()),
-    }
-}
-
-#[cfg(test)]
-pub fn untyped(e: Expr) -> TypedExpr {
-    TypedExpr {
-        ty: None,
-        expr: std::rc::Rc::new(e),
     }
 }
 
@@ -71,7 +63,7 @@ mod tests {
 
     #[test]
     fn test_basic_expr() {
-        assert_eq!(expr!(3), untyped(Expr::Literal(Literal::Num(3))));
+        assert_eq!(expr!(3), Expr::Literal(Literal::Num(3)).into());
     }
 
     #[test]
@@ -81,61 +73,75 @@ mod tests {
 
     #[test]
     fn test_cmp_logic() {
-        let three = untyped(Expr::Literal(Literal::Num(3)));
-        let four = untyped(Expr::Literal(Literal::Num(4)));
+        let three: BaseExpr = Expr::Literal(Literal::Num(3)).into();
+        let four: BaseExpr = Expr::Literal(Literal::Num(4)).into();
         assert_eq!(
             expr!((3 == 4 || 3 != 4) && (3 < 4 || 3 <= 4 || 3 > 4 || !(3 >= 4))),
-            untyped(Expr::And(
-                untyped(Expr::Or(
-                    untyped(Expr::Cmp {
+            Expr::And(
+                Expr::Or(
+                    Expr::Cmp {
                         cmp: Cmp::Eq,
                         e1: three.clone(),
                         e2: four.clone()
-                    }),
-                    untyped(Expr::Cmp {
+                    }
+                    .into(),
+                    Expr::Cmp {
                         cmp: Cmp::Neq,
                         e1: three.clone(),
                         e2: four.clone()
-                    })
-                )),
-                untyped(Expr::Or(
-                    untyped(Expr::Cmp {
+                    }
+                    .into()
+                )
+                .into(),
+                Expr::Or(
+                    Expr::Cmp {
                         cmp: Cmp::Lt,
                         e1: three.clone(),
                         e2: four.clone()
-                    }),
-                    untyped(Expr::Or(
-                        untyped(Expr::Cmp {
+                    }
+                    .into(),
+                    Expr::Or(
+                        Expr::Cmp {
                             cmp: Cmp::Le,
                             e1: three.clone(),
                             e2: four.clone()
-                        }),
-                        untyped(Expr::Or(
-                            untyped(Expr::Cmp {
+                        }
+                        .into(),
+                        Expr::Or(
+                            Expr::Cmp {
                                 cmp: Cmp::Gt,
                                 e1: three.clone(),
                                 e2: four.clone()
-                            }),
-                            untyped(Expr::Not(untyped(Expr::Cmp {
-                                cmp: Cmp::Ge,
-                                e1: three.clone(),
-                                e2: four.clone()
-                            })))
-                        ))
-                    ))
-                ))
-            ))
+                            }
+                            .into(),
+                            Expr::Not(
+                                Expr::Cmp {
+                                    cmp: Cmp::Ge,
+                                    e1: three.clone(),
+                                    e2: four.clone()
+                                }
+                                .into()
+                            )
+                            .into()
+                        )
+                        .into()
+                    )
+                    .into()
+                )
+                .into()
+            )
+            .into()
         );
     }
 
     // program tests
 
-    fn main_fn(stmts: Vec<Stmt>) -> Item {
+    fn main_fn(stmts: Vec<BaseStmt>) -> BaseItem {
         Item::Function(
             Identifier::Identifier("main".to_string()),
             vec![],
             Type::Unit.into(),
-            untyped(Expr::Block(stmts, untyped(Expr::Literal(Literal::Unit)))),
+            Expr::Block(stmts, Expr::Literal(Literal::Unit).into()).into(),
         )
     }
 
@@ -154,13 +160,9 @@ mod tests {
             ),
             Program {
                 items: vec![main_fn(vec![
-                    Stmt::Let(Some(x.clone()), untyped(three.clone()), false),
-                    Stmt::Let(Some(y.clone()), untyped(three.clone()), true),
-                    Stmt::Let(
-                        None,
-                        untyped(Expr::Print(untyped(Expr::Var(x.clone())))),
-                        false
-                    )
+                    Stmt::Let(Some(x.clone()), three.clone().into(), false),
+                    Stmt::Let(Some(y.clone()), three.clone().into(), true),
+                    Stmt::Let(None, Expr::Print(Expr::Var(x.clone()).into()).into(), false)
                 ])]
             }
         );
@@ -181,10 +183,11 @@ mod tests {
             Program {
                 items: vec![main_fn(vec![Stmt::Let(
                     None,
-                    untyped(Expr::Block(
-                        vec![Stmt::Let(None, untyped(Expr::Print(untyped(three))), false)],
-                        untyped(unit)
-                    )),
+                    Expr::Block(
+                        vec![Stmt::Let(None, Expr::Print(three.into()).into(), false)],
+                        unit.into()
+                    )
+                    .into(),
                     false
                 )])]
             }
@@ -210,13 +213,13 @@ mod tests {
             Program {
                 items: vec![main_fn(vec![Stmt::Let(
                     None,
-                    untyped(Expr::While {
-                        condition: untyped(true_),
-                        body: untyped(Expr::Block(
-                            vec![Stmt::Let(None, untyped(Expr::Print(untyped(three))), false)],
-                            untyped(unit)
-                        ))
-                    }),
+                    Expr::While {
+                        condition: true_.into(),
+                        body: Expr::Block(
+                            vec![Stmt::Let(None, Expr::Print(three.into()).into(), false)],
+                            unit.into()
+                        ).into()
+                    }.into(),
                     false
                 )])]
             }
@@ -270,32 +273,35 @@ mod tests {
                         Type::Borrow(Type::Int32.into(), true).into()
                     )],
                     Type::Unit.into(),
-                    untyped(Expr::Block(
+                    Expr::Block(
                         vec![
                             Stmt::Let(
                                 Some(Identifier::Identifier("x".to_string())),
-                                untyped(Expr::Literal(Literal::Num(3))),
+                                Expr::Literal(Literal::Num(3)).into(),
                                 false
                             ),
                             Stmt::Let(
                                 Some(Identifier::Identifier("y".to_string())),
-                                untyped(Expr::Borrow(
-                                    untyped(Expr::Var(Identifier::Identifier("x".to_string()))),
+                                Expr::Borrow(
+                                    Expr::Var(Identifier::Identifier("x".to_string())).into(),
                                     false
-                                )),
+                                )
+                                .into(),
                                 false
                             ),
                             Stmt::Let(
                                 Some(Identifier::Identifier("z".to_string())),
-                                untyped(Expr::Borrow(
-                                    untyped(Expr::Var(Identifier::Identifier("y".to_string()))),
+                                Expr::Borrow(
+                                    Expr::Var(Identifier::Identifier("y".to_string())).into(),
                                     true
-                                )),
+                                )
+                                .into(),
                                 false
                             )
                         ],
-                        untyped(Expr::Literal(Literal::Unit))
-                    ))
+                        Expr::Literal(Literal::Unit).into()
+                    )
+                    .into()
                 )]
             }
         );

@@ -25,176 +25,224 @@ fn check_place_expr(_context: &mut Context, expr: &TypedExpr) -> Result<(), Erro
     }
 }
 
-fn infer_expr(context: &mut Context, expr: &mut TypedExpr) -> Result<(), Error> {
+fn typed(expr: impl Into<Rc<Expr<TypeAnnot>>>, ty: impl Into<TypeAnnot>) -> TypedExpr {
+    TypedExpr {
+        expr: expr.into(),
+        annot: ty.into(),
+    }
+}
+
+fn infer_expr(context: &mut Context, expr: &BaseExpr) -> Result<TypedExpr, Error> {
     #[allow(unreachable_patterns)]
-    let ty = match Rc::get_mut(&mut expr.expr).unwrap() {
+    match &*expr.expr {
         Expr::Literal(ref l) => match l {
-            Literal::Num(_) => Type::Int32.into(),
-            Literal::Bool(_) => Type::Bool.into(),
-            Literal::Unit => Type::Unit.into(),
+            Literal::Num(n) => Ok(typed(Expr::Literal(Literal::Num(*n)), Type::Int32)),
+            Literal::Bool(b) => Ok(typed(Expr::Literal(Literal::Bool(*b)), Type::Bool)),
+            Literal::Unit => Ok(typed(Expr::Literal(Literal::Unit), Type::Unit)),
         },
         Expr::Bop {
-            bop: _,
-            ref mut e1,
-            ref mut e2,
+            bop,
+            ref e1,
+            ref e2,
         } => {
-            check_expr(context, e1, &Type::Int32.into())?;
-            check_expr(context, e2, &Type::Int32.into())?;
-            Type::Int32.into()
+            let e1 = check_expr(context, e1, &Type::Int32.into())?;
+            let e2 = check_expr(context, e2, &Type::Int32.into())?;
+            Ok(typed(
+                Expr::Bop {
+                    bop: bop.clone(),
+                    e1,
+                    e2,
+                },
+                Type::Int32,
+            ))
         }
         Expr::Cmp {
             ref cmp,
-            ref mut e1,
-            ref mut e2,
+            ref e1,
+            ref e2,
         } => {
             match cmp {
                 Cmp::Eq | Cmp::Neq => {
                     // e1 and e2 have to be the same type
-                    infer_expr(context, e1)?;
-                    check_expr(context, e2, &e1.ty.clone().unwrap())?;
-                    Type::Bool.into()
+                    let e1 = infer_expr(context, e1)?;
+                    let e2 = check_expr(context, e2, &e1.annot.ty.clone())?;
+                    Ok(typed(
+                        Expr::Cmp {
+                            cmp: cmp.clone(),
+                            e1,
+                            e2,
+                        },
+                        Type::Bool,
+                    ))
                 }
                 Cmp::Lt | Cmp::Le | Cmp::Gt | Cmp::Ge => {
                     // both args have to be numbers
-                    check_expr(context, e1, &Type::Int32.into())?;
-                    check_expr(context, e2, &Type::Int32.into())?;
-                    Type::Bool.into()
+                    let e1 = check_expr(context, e1, &Type::Int32.into())?;
+                    let e2 = check_expr(context, e2, &Type::Int32.into())?;
+                    Ok(typed(
+                        Expr::Cmp {
+                            cmp: cmp.clone(),
+                            e1,
+                            e2,
+                        },
+                        Type::Bool,
+                    ))
                 }
             }
         }
-        Expr::Or(ref mut e1, ref mut e2) | Expr::And(ref mut e1, ref mut e2) => {
-            check_expr(context, e1, &Type::Bool.into())?;
-            check_expr(context, e2, &Type::Bool.into())?;
-            Type::Bool.into()
+        Expr::Or(ref e1, ref e2) => {
+            let e1 = check_expr(context, e1, &Type::Bool.into())?;
+            let e2 = check_expr(context, e2, &Type::Bool.into())?;
+            Ok(typed(Expr::Or(e1, e2), Type::Bool))
         }
-        Expr::Not(ref mut e) => {
-            check_expr(context, e, &Type::Bool.into())?;
-            Type::Bool.into()
+        Expr::And(ref e1, ref e2) => {
+            let e1 = check_expr(context, e1, &Type::Bool.into())?;
+            let e2 = check_expr(context, e2, &Type::Bool.into())?;
+            Ok(typed(Expr::Or(e1, e2), Type::Bool))
+        }
+        Expr::Not(ref e) => {
+            let e = check_expr(context, e, &Type::Bool.into())?;
+            Ok(typed(Expr::Not(e), Type::Bool))
         }
         Expr::If {
-            ref mut condition,
-            ref mut then,
-            ref mut otherwise,
+            ref condition,
+            ref then,
+            ref otherwise,
         } => {
-            check_expr(context, condition, &Type::Bool.into())?;
-            infer_expr(context, then)?;
-            let ty = then.ty.clone().unwrap();
-            check_expr(context, otherwise, &ty)?;
-            ty
+            let condition = check_expr(context, condition, &Type::Bool.into())?;
+            let then = infer_expr(context, then)?;
+            let ty = then.annot.ty.clone();
+            let otherwise = check_expr(context, otherwise, &ty)?;
+            Ok(typed(
+                Expr::If {
+                    condition,
+                    then,
+                    otherwise,
+                },
+                ty,
+            ))
         }
         Expr::While {
-            ref mut condition,
-            ref mut body,
+            ref condition,
+            ref body,
         } => {
-            check_expr(context, condition, &Type::Bool.into())?;
-            infer_expr(context, body)?;
-            body.ty.clone().unwrap()
+            let condition = check_expr(context, condition, &Type::Bool.into())?;
+            let body = infer_expr(context, body)?;
+            let ty = body.annot.ty.clone();
+            Ok(typed(Expr::While { condition, body }, ty))
         }
-        Expr::Print(ref mut e) => {
-            check_expr(context, e, &Type::Int32.into())?;
-            Type::Unit.into()
+        Expr::Print(ref e) => {
+            let e = check_expr(context, e, &Type::Int32.into())?;
+            Ok(typed(Expr::Print(e), Type::Unit))
         }
-        Expr::Block(ref mut stmts, ref mut e) => {
+        Expr::Block(ref stmts, ref e) => {
             context.types.push();
-            for stmt in stmts.iter_mut() {
-                check_stmt(context, stmt)?;
+            let mut checked_stmts = vec![];
+            // TODO: should be a way to do this as a map() but the Result makes it inconvenient
+            for stmt in stmts.iter() {
+                checked_stmts.push(check_stmt(context, stmt)?);
             }
-            infer_expr(context, e)?;
-            let ty = e.ty.clone().unwrap();
+            let e = infer_expr(context, e)?;
+            let ty = e.annot.ty.clone();
             context.types.pop();
-            ty
+            Ok(typed(Expr::Block(checked_stmts, e), ty))
         }
-        Expr::FunCall(ref mut f, ref mut args) => {
-            infer_expr(context, f)?;
-            if let &Type::Function(ref targs, ref ret) = &*f.ty.clone().unwrap() {
+        Expr::FunCall(ref f, ref args) => {
+            let f = infer_expr(context, f)?;
+            if let &Type::Function(ref targs, ref ret) = &*f.annot.ty.clone() {
                 if args.len() != targs.len() {
                     bail!("Wrong number of arguments supplied to {:?}", f);
                 }
+                let mut checked_args = vec![];
                 for i in 0..args.len() {
-                    check_expr(context, &mut args[i], &targs[i])?;
+                    checked_args.push(check_expr(context, &args[i], &targs[i])?);
                 }
-                ret.clone()
+                Ok(typed(Expr::FunCall(f, checked_args), ret.clone()))
             } else {
-                bail!("{:?} is not a function type", f.ty.clone())
+                bail!("{:?} is not a function type", f.annot.ty.clone())
             }
         }
-        Expr::Var(ref mut id) => {
+        Expr::Var(ref id) => {
             let ty = context.types.lookup(id);
             if let Some(ty) = ty {
-                ty.0.clone()
+                Ok(typed(Expr::Var(id.clone()), ty.0.clone()))
             } else {
                 bail!("bad identifier {:?}", id);
             }
         }
-        Expr::Assign(ref mut lhs, ref mut rhs) => {
+        Expr::Assign(ref lhs, ref rhs) => {
             // lhs needs to be a valid left-hand side
-            infer_expr(context, lhs)?;
-            check_place_expr(context, lhs)?;
-            check_expr(context, rhs, &lhs.ty.clone().unwrap())?;
-            Type::Unit.into()
+            let lhs = infer_expr(context, lhs)?;
+            check_place_expr(context, &lhs)?;
+            let rhs = check_expr(context, rhs, &lhs.annot.ty.clone())?;
+            Ok(typed(Expr::Assign(lhs, rhs), Type::Unit))
         }
-        Expr::Borrow(ref mut e, is_mut) => {
-            infer_expr(context, e)?;
-            Type::Borrow(e.ty.clone().unwrap(), *is_mut).into()
+        Expr::Borrow(ref e, is_mut) => {
+            let e = infer_expr(context, e)?;
+            let ty = e.annot.ty.clone();
+            Ok(typed(Expr::Borrow(e, *is_mut), Type::Borrow(ty, *is_mut)))
         }
-        Expr::Deref(ref mut e) => {
-            infer_expr(context, e)?;
-            if let Type::Borrow(ref ty, _) = *e.ty.clone().unwrap() {
-                ty.clone()
+        Expr::Deref(ref e) => {
+            let e = infer_expr(context, e)?;
+            if let Type::Borrow(ref ty, _) = *e.annot.ty.clone() {
+                Ok(typed(Expr::Deref(e), ty.clone()))
             } else {
-                bail!("{:?} is not a borrow", e.ty.clone());
+                bail!("{:?} is not a borrow", e.annot.ty.clone());
             }
         }
         _ => unimplemented!(),
-    };
-    expr.ty = Some(ty);
-    Ok(())
+    }
 }
 
-fn check_expr(context: &mut Context, expr: &mut TypedExpr, ty: &RcType) -> Result<(), Error> {
-    infer_expr(context, expr)?;
-    if &expr.ty.clone().unwrap() == ty {
-        Ok(())
+fn check_expr(context: &mut Context, expr: &BaseExpr, ty: &RcType) -> Result<TypedExpr, Error> {
+    let expr = infer_expr(context, expr)?;
+    if &expr.annot.ty.clone() == ty {
+        Ok(expr)
     } else {
         bail!("types don't match");
     }
 }
 
-fn check_stmt(context: &mut Context, stmt: &mut Stmt) -> Result<(), Error> {
+fn check_stmt(context: &mut Context, stmt: &BaseStmt) -> Result<TypedStmt, Error> {
     match stmt {
-        Stmt::Let(None, ref mut e, false) => {
-            infer_expr(context, e)?;
+        Stmt::Let(None, ref e, false) => {
+            let e = infer_expr(context, e)?;
+            Ok(TypedStmt::Let(None, e, false))
         }
-        Stmt::Let(Some(id), ref mut e, is_mut) => {
-            infer_expr(context, e)?;
-            context
-                .types
-                .set(id.clone(), (e.ty.clone().unwrap(), *is_mut));
+        Stmt::Let(Some(id), ref e, is_mut) => {
+            let e = infer_expr(context, e)?;
+            context.types.set(id.clone(), (e.annot.ty.clone(), *is_mut));
+            Ok(TypedStmt::Let(Some(id.clone()), e, *is_mut))
         }
         _ => unimplemented!(),
     }
-    Ok(())
 }
 
-fn check_item(context: &mut Context, item: &mut Item) -> Result<(), Error> {
+fn check_item(context: &mut Context, item: &BaseItem) -> Result<TypedItem, Error> {
     #[allow(unreachable_patterns)]
     match item {
-        Item::Function(_, ref args, ref ret, ref mut body) => {
+        Item::Function(ref name, ref args, ref ret, ref body) => {
             context.types.push();
             for (name, ty) in args {
                 context.types.set(name.clone(), (ty.clone(), false));
             }
-            check_expr(context, body, &ret.clone())?;
+            let body = check_expr(context, body, &ret.clone())?;
             context.types.pop();
             // this fn's type should already be in the context, no need to add it
-            Ok(())
+            Ok(TypedItem::Function(
+                name.clone(),
+                args.clone(),
+                ret.clone(),
+                body,
+            ))
         }
         _ => unimplemented!(),
     }
 }
 
-pub fn check_program(program: &mut Program) -> Result<(), Error> {
+pub fn check_program(program: &BaseProgram) -> Result<TypedProgram, Error> {
     let mut context = Context::new();
+    let mut items = vec![];
     // add declarations to top-level context
     for item in program.items.iter() {
         #[allow(unreachable_patterns)]
@@ -215,10 +263,10 @@ pub fn check_program(program: &mut Program) -> Result<(), Error> {
             _ => unimplemented!(),
         }
     }
-    for item in program.items.iter_mut() {
-        check_item(&mut context, item)?;
+    for item in program.items.iter() {
+        items.push(check_item(&mut context, item)?);
     }
-    Ok(())
+    Ok(TypedProgram { items })
 }
 
 #[cfg(test)]
@@ -229,33 +277,33 @@ mod tests {
 
     macro_rules! assert_expr_infers {
         ($e:expr, $t: ty) => {{
-            let mut e = expr!($e);
+            let e = expr!($e);
             let ty = Rc::new(ty!($t));
             let mut context = Context::new();
-            infer_expr(&mut context, &mut e).expect("unexpected type error");
-            assert_eq!(e.ty.unwrap(), ty);
+            let e = infer_expr(&mut context, &e).expect("unexpected type error");
+            assert_eq!(e.annot.ty, ty);
         }};
     }
 
     macro_rules! assert_expr_ill_typed {
         ($e:expr) => {{
-            let mut e = expr!($e);
+            let e = expr!($e);
             let mut context = Context::new();
-            assert!(infer_expr(&mut context, &mut e).is_err());
+            assert!(infer_expr(&mut context, &e).is_err());
         }};
     }
 
     macro_rules! assert_program_well_typed {
         ($($p:tt)*) => {{
-            let mut p = program!($($p)*);
-            assert!(check_program(&mut p).is_ok());
+            let  p = program!($($p)*);
+            assert!(check_program(& p).is_ok());
         }};
     }
 
     macro_rules! assert_program_ill_typed {
         ($($p:tt)*) => {{
-            let mut p = program!($($p)*);
-            assert!(check_program(&mut p).is_err());
+            let  p = program!($($p)*);
+            assert!(check_program(& p).is_err());
         }};
     }
 

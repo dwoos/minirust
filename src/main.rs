@@ -37,7 +37,6 @@ fn main() {
 
     let output_file = matches.value_of("OUTPUT").unwrap();
     let mut parsed = parse::parse_program(&input).expect("parse error");
-    typecheck::check_program(&mut parsed).expect("type error");
-    println!("{:?}", parsed);
-    codegen::compile_program(parsed, std::path::Path::new(output_file)).expect("compile error");
+    let checked = typecheck::check_program(&mut parsed).expect("type error");
+    codegen::compile_program(checked, std::path::Path::new(output_file)).expect("compile error");
 }

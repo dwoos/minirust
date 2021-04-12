@@ -11,7 +11,7 @@ pub Type: Type = {
     "&" "mut" <t: Type> => Type::Borrow(t.into(), true)
 }
 
-pub Program: Program = {
+pub Program: Program<BaseExpr> = {
     <items: (<Item>)*> => Program {<>}
 }
 
@@ -19,53 +19,53 @@ pub Binding: (Identifier, RcType) = {
     <id: Identifier> ":" <t: Type> => (id, t.into())
 }
 
-pub Item: Item = {
+pub Item: Item<BaseExpr> = {
     "fn" <id:Identifier> "(" <bindings: Comma<Binding>> ")" <ret:("->" <Type>)?> <body:Block> =>
         Item::Function(id, bindings, ret.unwrap_or(Type::Unit).into(),
                        body).into()
 }
 
-pub Stmt: Stmt = {
+pub Stmt: Stmt<BaseExpr> = {
     "let" <id: Identifier> "=" <e: Expr> ";" => Stmt::Let(Some(id), e, false),
     "let" "mut" <id: Identifier> "=" <e: Expr> ";" => Stmt::Let(Some(id), e, true),
     <e: Expr> ";" => Stmt::Let(None, e, false)
 }
 
-pub Expr: TypedExpr = {
+pub Expr: BaseExpr = {
     ExprAssign
 }
 
-pub ExprAssign: TypedExpr = {
+pub ExprAssign: BaseExpr = {
     <lhs: ExprAssign> "=" <rhs: ExprOr> => Expr::Assign(<>).into(),
     ExprOr
 }
 
-pub ExprOr: TypedExpr = {
+pub ExprOr: BaseExpr = {
     <e1: ExprAnd> "||" <e2: ExprOr> => Expr::Or(<>).into(),
     ExprAnd
 }
 
-pub ExprAnd: TypedExpr = {
+pub ExprAnd: BaseExpr = {
     <e1: ExprCmp> "&&" <e2: ExprAnd> => Expr::And(<>).into(),
     ExprCmp
 }
 
-pub ExprCmp: TypedExpr = {
+pub ExprCmp: BaseExpr = {
     <e1: ExprBop1> <cmp: Cmp> <e2: ExprCmp> => Expr::Cmp {<>}.into(),
     ExprBop1
 }
 
-pub ExprBop1: TypedExpr = {
+pub ExprBop1: BaseExpr = {
     <e1: ExprBop2> <bop: Bop1> <e2: ExprBop1> => Expr::Bop {<>}.into(),
     ExprBop2
 };
 
-pub ExprBop2: TypedExpr = {
+pub ExprBop2: BaseExpr = {
     <e1: ExprUnary> <bop: Bop2> <e2: ExprBop2> => Expr::Bop {<>}.into(),
     ExprUnary
 }
 
-pub ExprUnary: TypedExpr = {
+pub ExprUnary: BaseExpr = {
     "!" <ExprUnary> => Expr::Not(<>).into(),
     "&" <ExprUnary> => Expr::Borrow(<>, false).into(),
     "&" "mut" <ExprUnary> => Expr::Borrow(<>, true).into(),
@@ -75,7 +75,7 @@ pub ExprUnary: TypedExpr = {
     Term
 }
 
-pub Term: TypedExpr = {
+pub Term: BaseExpr = {
     Literal => Expr::Literal(<>).into(),
     "if" <condition: Expr> <then:Block> "else" <otherwise:Block>
         => Expr::If {<>}.into(),
@@ -90,7 +90,7 @@ pub Term: TypedExpr = {
     
 }
 
-pub Block: TypedExpr = {
+pub Block: BaseExpr = {
     "{" <Stmt*> "}" => Expr::Block(<>, Expr::Literal(Literal::Unit).into()).into(),
     "{" <Stmt*> <Expr> "}" => Expr::Block(<>).into()
 }

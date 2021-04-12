@@ -144,7 +144,7 @@ fn compile_expr<'a, 'ctx>(
             ref then,
             ref otherwise,
         } => {
-            let llvm_type = size(cgc, expr.ty.clone().unwrap());
+            let llvm_type = size(cgc, expr.annot.ty.clone());
             cgc.builder.position_at_end(bb);
             let result = cgc.builder.build_alloca(llvm_type, "");
             let (condition_val, bb) = compile_expr(cgc, f, bb, condition);
@@ -172,7 +172,7 @@ fn compile_expr<'a, 'ctx>(
             ref condition,
             ref body,
         } => {
-            let llvm_type = size(cgc, expr.ty.clone().unwrap());
+            let llvm_type = size(cgc, expr.annot.ty.clone());
             cgc.builder.position_at_end(bb);
             let result = cgc.builder.build_alloca(llvm_type, "");
             let test_bb = cgc.context.append_basic_block(f, "test");
@@ -257,7 +257,7 @@ fn compile_expr<'a, 'ctx>(
             _ => {
                 let (val, bb) = compile_expr(cgc, f, bb, e);
                 // non-place expr; make a temporary location
-                let llvm_type = size(cgc, e.ty.clone().unwrap());
+                let llvm_type = size(cgc, e.annot.ty.clone());
                 cgc.builder.position_at_end(bb);
                 let storage = cgc.builder.build_alloca(llvm_type, "tmp");
                 cgc.builder.build_store(storage, val);
@@ -300,7 +300,7 @@ fn compile_statement<'a, 'ctx>(
     cgc: &mut CodeGenContext<'a, 'ctx>,
     f: FunctionValue<'ctx>,
     bb: BasicBlock<'ctx>,
-    stmt: &Stmt,
+    stmt: &Stmt<TypedExpr>,
 ) -> BasicBlock<'ctx> {
     #[allow(unreachable_patterns)]
     match stmt {
@@ -310,7 +310,7 @@ fn compile_statement<'a, 'ctx>(
         Stmt::Let(ref id, ref e, _) => {
             let (val, bb) = compile_expr(cgc, f, bb, e);
             if let Some(id) = id {
-                let llvm_type = size(cgc, e.ty.clone().unwrap());
+                let llvm_type = size(cgc, e.annot.ty.clone());
                 cgc.builder.position_at_end(bb);
                 let storage = cgc.builder.build_alloca(llvm_type, "");
                 cgc.builder.build_store(storage, val);
@@ -322,7 +322,10 @@ fn compile_statement<'a, 'ctx>(
     }
 }
 
-fn compile_item<'a, 'ctx>(cgc: &mut CodeGenContext<'a, 'ctx>, item: &Item) -> Result<(), Error> {
+fn compile_item<'a, 'ctx>(
+    cgc: &mut CodeGenContext<'a, 'ctx>,
+    item: &Item<TypedExpr>,
+) -> Result<(), Error> {
     #[allow(unreachable_patterns)]
     match item {
         Item::Function(ref name, ref args, _, ref body) => {
@@ -352,7 +355,10 @@ fn compile_item<'a, 'ctx>(cgc: &mut CodeGenContext<'a, 'ctx>, item: &Item) -> Re
     }
 }
 
-pub fn compile_program(prog: Program, output_file: &std::path::Path) -> Result<(), Error> {
+pub fn compile_program(
+    prog: Program<TypedExpr>,
+    output_file: &std::path::Path,
+) -> Result<(), Error> {
     let context = LLVMContext::create();
     let module = context.create_module("main");
     let mut charcodes: Vec<_> = "%d\n".chars().map(|c| c as u8).collect();
@@ -420,8 +426,8 @@ mod tests {
     use std::process;
     use tempfile::NamedTempFile;
 
-    fn execute_program(mut prog: Program) -> String {
-        check_program(&mut prog).expect("typechecking failed");
+    fn execute_program(mut prog: Program<BaseExpr>) -> String {
+        let prog = check_program(&mut prog).expect("typechecking failed");
         let out_file = NamedTempFile::new().expect("temp file creation failed");
         let out_file_path = out_file.path();
         compile_program(prog, out_file_path).expect("compilation failed");
